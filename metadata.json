@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Bengaluru through your letters",
+  "description": "A cultural wayfinding archive exploring Bengaluru's identity through street typography and historical narratives.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
