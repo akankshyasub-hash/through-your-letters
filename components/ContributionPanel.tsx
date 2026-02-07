@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { analyzeStreetSign, QuotaExceededError } from '../services/geminiService';
-import { Loader2, Upload, Search, X, Image as ImageIcon, CheckCircle, ArrowRight, Bookmark, Link2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Loader2, Upload, Search, X, Image as ImageIcon, CheckCircle, ArrowRight, Bookmark, Link2, AlertTriangle, RefreshCw, User, Globe, Database } from 'lucide-react';
 import { BENGALURU_REGIONS } from '../constants';
 import { ZinePageData } from '../types';
 
@@ -14,6 +14,8 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [activeSource, setActiveSource] = useState<'local' | 'photos' | 'drive' | null>(null);
+  const [successSource, setSuccessSource] = useState<'local' | 'photos' | 'drive' | null>(null);
   const [result, setResult] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +25,8 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
     neighborhood: BENGALURU_REGIONS[0],
     customNeighborhood: '',
     description: '',
-    imageSourceName: '',
-    imageSourceUrl: ''
+    contributorName: '',
+    sourceUrl: ''
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,7 +34,6 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // Automatic redirect after success
   useEffect(() => {
     if (saved) {
       const timer = setTimeout(() => {
@@ -49,7 +50,6 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
       img.onerror = () => reject(new Error("Failed to load image for processing."));
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        // Reduced size slightly more to ensure it fits in localStorage alongside other entries
         const MAX_SIZE = 600; 
         let width = img.width;
         let height = img.height;
@@ -68,11 +68,27 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error("Canvas context failed."));
-        // Draw with a slight reduction in quality (0.5) to keep file size small
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', 0.5));
       };
     });
+  };
+
+  const handleSourceClick = (source: 'local' | 'photos' | 'drive') => {
+    setError(null);
+    setIsQuotaError(false);
+    setActiveSource(source);
+    
+    if (source === 'local') {
+      fileInputRef.current?.click();
+    } else {
+      // Simulate remote connection delay
+      setIsProcessingImage(true);
+      setTimeout(() => {
+        setIsProcessingImage(false);
+        fileInputRef.current?.click();
+      }, 800);
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,10 +98,6 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
       setIsQuotaError(false);
       setIsProcessingImage(true);
       const reader = new FileReader();
-      reader.onerror = () => {
-        setError("File read failed.");
-        setIsProcessingImage(false);
-      };
       reader.onloadend = async () => {
         const rawBase64 = reader.result as string;
         try {
@@ -93,19 +105,38 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
           setImage(compressed);
           setResult(null);
           setSaved(false);
+          setSuccessSource(activeSource);
         } catch (err) {
-          console.error("Processing failed", err);
           setError("Image processing failed. Try a different photo.");
+          setSuccessSource(null);
         } finally {
           setIsProcessingImage(false);
+          setActiveSource(null);
         }
       };
       reader.readAsDataURL(file);
+    } else {
+      setActiveSource(null);
+      setIsProcessingImage(false);
     }
+  };
+
+  const validateForm = () => {
+    if (!form.contributorName.trim()) {
+      setError("Please provide your name for the archive records.");
+      return false;
+    }
+    if (!form.sourceUrl.trim()) {
+      setError("Please provide a source link (e.g., location URL or photo link).");
+      return false;
+    }
+    return true;
   };
 
   const handleAnalyze = async () => {
     if (!image) return;
+    if (!validateForm()) return;
+
     setLoading(true);
     setError(null);
     setIsQuotaError(false);
@@ -118,7 +149,6 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
         throw new Error("No analysis data returned.");
       }
     } catch (error: any) {
-      console.error("Analysis failed", error);
       if (error instanceof QuotaExceededError) {
         setIsQuotaError(true);
         setError(error.message);
@@ -132,16 +162,16 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
 
   const handleSaveToZine = (isInstant: boolean = false) => {
     if (!image) return;
+    if (!validateForm()) return;
+
     const finalNeighborhood = form.neighborhood.includes("Other") ? (form.customNeighborhood || "Bengaluru Streets") : form.neighborhood;
     
-    // Fallback logic for title if AI analysis failed or was skipped
     let title = "Field Discovery";
     if (!isInstant && result?.style) {
       title = result.style;
     } else if (form.customNeighborhood) {
       title = form.customNeighborhood;
     } else if (form.description) {
-      // Use first word of description as a hint
       title = form.description.split(' ').slice(0, 2).join(' ') + "...";
     }
     
@@ -152,10 +182,11 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
       culturalContext: isInstant ? (form.description || "Manual documentation of a street find.") : (result?.observation || "Interesting typeface found."),
       historicalNote: form.description || "Archived by field contributor.",
       image: image,
-      imageSource: form.imageSourceName || "Field Contributor",
-      sourceUrl: form.imageSourceUrl || "#",
+      imageSource: form.contributorName,
+      contributorName: form.contributorName,
+      sourceUrl: form.sourceUrl || "#",
       vibe: isInstant ? "Street Type" : (result?.script || "Unknown Script"),
-      readMoreUrl: "#",
+      readMoreUrl: form.sourceUrl || "#",
       isUserContribution: true
     };
     onAddContribution(newEntry);
@@ -186,27 +217,47 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { name: 'Upload Photo', icon: <ImageIcon size={16} /> },
-                  { name: 'Browse Files', icon: <Upload size={16} /> }
-                ].map((src) => (
-                  <button 
-                    key={src.name}
-                    onClick={() => fileInputRef.current?.click()} 
-                    className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-black bg-white text-black transition-all text-[11px] font-black uppercase brutalist-shadow-sm hover:bg-slate-50 active:translate-y-0.5 active:shadow-none"
-                  >
-                    {src.icon}
-                    {src.name}
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 gap-3">
+                <button 
+                  onClick={() => handleSourceClick('local')}
+                  className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-black bg-white text-black transition-all text-[9px] font-black uppercase brutalist-shadow-sm hover:bg-slate-50 active:translate-y-0.5 active:shadow-none relative group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Upload size={14} />
+                    {activeSource === 'local' && isProcessingImage ? <Loader2 size={12} className="animate-spin text-[#cc543a]" /> : successSource === 'local' && <CheckCircle size={12} className="text-[#2d5a27]" />}
+                  </div>
+                  Local
+                </button>
+                <button 
+                  onClick={() => handleSourceClick('photos')}
+                  className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-black bg-white text-black transition-all text-[9px] font-black uppercase brutalist-shadow-sm hover:bg-slate-50 active:translate-y-0.5 active:shadow-none relative group"
+                >
+                  <div className="flex items-center gap-2">
+                    <ImageIcon size={14} className="text-blue-500" />
+                    {activeSource === 'photos' && isProcessingImage ? <Loader2 size={12} className="animate-spin text-[#cc543a]" /> : successSource === 'photos' && <CheckCircle size={12} className="text-[#2d5a27]" />}
+                  </div>
+                  Photos
+                </button>
+                <button 
+                  onClick={() => handleSourceClick('drive')}
+                  className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-black bg-white text-black transition-all text-[9px] font-black uppercase brutalist-shadow-sm hover:bg-slate-50 active:translate-y-0.5 active:shadow-none relative group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Database size={14} className="text-green-600" />
+                    {activeSource === 'drive' && isProcessingImage ? <Loader2 size={12} className="animate-spin text-[#cc543a]" /> : successSource === 'drive' && <CheckCircle size={12} className="text-[#2d5a27]" />}
+                  </div>
+                  Drive
+                </button>
               </div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
            </section>
 
            <div className="relative group bg-slate-100 border-4 border-black p-4 brutalist-shadow-sm min-h-[300px] flex items-center justify-center transition-colors overflow-hidden">
               {isProcessingImage ? (
-                <Loader2 size={48} className="animate-spin text-[#cc543a]" />
+                <div className="flex flex-col items-center gap-4">
+                  <Loader2 size={48} className="animate-spin text-[#cc543a]" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-black animate-pulse">Connecting to source...</p>
+                </div>
               ) : image ? (
                 <div className="w-full relative animate-in fade-in duration-300">
                   <img src={image} className="w-full h-auto max-h-[500px] object-contain border-2 border-black shadow-lg bg-white" alt="Preview" />
@@ -227,7 +278,7 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
                     <AlertTriangle size={24} />
                  </div>
                  <div>
-                   <h5 className="font-black uppercase text-xs tracking-widest mb-1">System Limitation</h5>
+                   <h5 className="font-black uppercase text-xs tracking-widest mb-1">Attention Required</h5>
                    <p className="text-xs font-bold leading-relaxed">{error}</p>
                  </div>
                </div>
@@ -241,21 +292,38 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
                )}
              </div>
            )}
-
-           {image && !saved && !isQuotaError && (
-             <div className="bg-[#cc543a]/5 border-2 border-[#cc543a] p-6 space-y-4 brutalist-shadow-sm">
-                <button onClick={() => handleSaveToZine(true)} className="w-full bg-black text-white py-4 font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-[#cc543a] transition-all">
-                  Instant Archive Discovery <ArrowRight size={16} />
-                </button>
-                <p className="text-[10px] text-slate-400 italic text-center">Save directly without AI metadata extraction.</p>
-             </div>
-           )}
         </div>
 
         <div className="space-y-8 bg-white p-8 md:p-10 border-4 border-black brutalist-shadow flex flex-col transition-colors">
-          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#cc543a]">Step 02: Analysis & Location</h4>
+          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#cc543a]">Step 02: Archive Details</h4>
           
           <div className="space-y-6 flex-1">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                <User size={10} /> Contributor Name <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="text"
+                placeholder="Who should be credited for this discovery?"
+                value={form.contributorName}
+                onChange={(e) => setForm({...form, contributorName: e.target.value})}
+                className="w-full bg-slate-50 border-2 border-black p-4 text-sm font-black text-black focus:bg-white focus:ring-2 focus:ring-[#cc543a] outline-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                <Globe size={10} /> Source Link / Location <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="url"
+                placeholder="Link to photo or Google Maps location"
+                value={form.sourceUrl}
+                onChange={(e) => setForm({...form, sourceUrl: e.target.value})}
+                className="w-full bg-slate-50 border-2 border-black p-4 text-sm font-black text-black focus:bg-white focus:ring-2 focus:ring-[#cc543a] outline-none"
+              />
+            </div>
+
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Neighborhood</label>
               <select 
@@ -281,9 +349,9 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
             )}
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Discovery Caption / Anecdote</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Archival Note (Anecdote or Detail)</label>
               <textarea 
-                placeholder="Where exactly was this? Describe the typeface or the story behind it."
+                placeholder="What made you click this? Describe the context or the material."
                 rows={3}
                 value={form.description}
                 onChange={(e) => setForm({...form, description: e.target.value})}
@@ -298,7 +366,7 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
                 className={`w-full py-6 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-3 brutalist-shadow transition-all ${!image || loading ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200 shadow-none' : 'bg-black text-white hover:bg-[#cc543a] border-black'}`}
               >
                 {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
-                Extract Type Metadata
+                {loading ? "ARCHIVING..." : "Let's Add to the Gallery"}
               </button>
             )}
 
@@ -313,7 +381,7 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
                 </div>
                 <button onClick={() => handleSaveToZine(false)} className="w-full py-6 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-3 brutalist-shadow bg-[#2d5a27] text-white hover:bg-black transition-colors">
                   <Bookmark size={20} />
-                  Archive Specimen
+                  Finalize Archiving
                 </button>
               </div>
             )}
@@ -325,25 +393,10 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onBack, onAddCont
                 </div>
                 <div>
                   <h3 className="text-2xl font-black uppercase tracking-tighter text-black">Artifact Archived</h3>
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 italic">Successfully added to the zine!</p>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 italic">Successfully added to the museum!</p>
                 </div>
-                
-                {/* Visual Confirmation Preview */}
-                <div className="bg-[#f8f5f0] border-2 border-black p-2 brutalist-shadow-sm rotate-1 max-w-[200px] animate-in zoom-in-95 duration-500">
-                  <div className="aspect-square w-full overflow-hidden border border-black mb-2 bg-white">
-                    <img src={image || ''} className="w-full h-full object-cover grayscale contrast-125" alt="Archived preview" />
-                  </div>
-                  <div className="text-left px-1 space-y-0.5">
-                    <p className="text-[10px] font-black uppercase truncate leading-none">{lastArchived?.title}</p>
-                    <p className="text-[8px] font-bold text-[#cc543a] uppercase tracking-tighter truncate">{lastArchived?.location}</p>
-                  </div>
-                </div>
-
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase text-slate-500 animate-pulse">Redirecting to gallery...</p>
-                  <button onClick={onBack} className="bg-black text-white px-8 py-3 font-black uppercase tracking-widest text-xs brutalist-shadow hover:bg-[#cc543a] transition-all">
-                    Return Home Now
-                  </button>
                 </div>
               </div>
             )}
