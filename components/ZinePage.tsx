@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { ZinePageData } from '../types';
-import { ExternalLink, Share2, MapPin, Languages, Loader2, ChevronDown, Hash, Link2, Type } from 'lucide-react';
+import { ExternalLink, Share2, MapPin, Languages, Loader2, ChevronDown, Hash, Link2, Type, User, ArrowUpRight } from 'lucide-react';
 import { translateContent } from '../services/geminiService';
 
 interface ZinePageProps {
@@ -9,16 +9,17 @@ interface ZinePageProps {
 }
 
 const TypographicPlaceholder = ({ title, script }: { title: string, script: string }) => {
-  // Use generic Latin fallback for placeholders
   const getChar = () => {
     if (script.toLowerCase().includes('urdu')) return 'ع';
     if (script.toLowerCase().includes('devanagari')) return 'अ';
+    if (script.toLowerCase().includes('kannada')) return 'ಅ';
     return title.charAt(0).toUpperCase();
   };
 
   const getScriptClass = () => {
     if (script.toLowerCase().includes('urdu')) return 'urdu';
     if (script.toLowerCase().includes('devanagari')) return 'devanagari';
+    if (script.toLowerCase().includes('kannada')) return 'kannada';
     return '';
   };
 
@@ -36,10 +37,6 @@ const TypographicPlaceholder = ({ title, script }: { title: string, script: stri
         <div className="w-12 h-0.5 bg-black/10"></div>
         <p className="handwritten text-sm text-slate-400">Specimen ID: BLR-TYP-{pageId(title)}</p>
       </div>
-      
-      <div className="absolute bottom-4 right-4 text-[8px] font-black uppercase tracking-widest text-black/20 vertical-text">
-        Artifact Scan // Street Level
-      </div>
     </div>
   );
 };
@@ -54,9 +51,17 @@ const pageId = (str: string) => {
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
+  { code: 'kn', name: 'ಕನ್ನಡ (Kannada)' },
   { code: 'hi', name: 'हिन्दी (Hindi)' },
   { code: 'ta', name: 'தமிழ் (Tamil)' },
-  { code: 'ur', name: 'اردو (Urdu)' }
+  { code: 'te', name: 'తెలుగు (Telugu)' },
+  { code: 'ml', name: 'മലയാളം (Malayalam)' },
+  { code: 'ur', name: 'اردو (Urdu)' },
+  { code: 'bn', name: 'বাংলা (Bengali)' },
+  { code: 'mr', name: 'मराठी (Marathi)' },
+  { code: 'pa', name: 'ਪੰਜਾਬੀ (Punjabi)' },
+  { code: 'or', name: 'ଓଡ଼ିଆ (Odia)' },
+  { code: 'gu', name: 'ગુજરાતી (Gujarati)' }
 ];
 
 const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
@@ -66,7 +71,12 @@ const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
 
   const getLangClass = (code: string) => {
     switch (code) {
-      case 'hi': return 'devanagari';
+      case 'hi': case 'mr': return 'devanagari';
+      case 'kn': return 'kannada';
+      case 'te': return 'telugu';
+      case 'ml': return 'malayalam';
+      case 'ta': return 'latin'; // Fallback
+      case 'bn': return 'bengali';
       case 'ur': return 'urdu';
       default: return '';
     }
@@ -108,6 +118,9 @@ const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
   const isEven = Number(page.id) % 2 === 0;
   const langClass = getLangClass(currentLang);
 
+  const targetUrl = page.readMoreUrl || page.sourceUrl;
+  const hasValidUrl = targetUrl && targetUrl !== "#";
+
   return (
     <div id={`page-${page.id}`} className={`flex flex-col ${isEven ? 'md:flex-row-reverse' : 'md:flex-row'} gap-12 items-start scroll-mt-24 pb-24 border-b-2 border-black/10 last:border-b-0`}>
       <div className="w-full md:w-3/5 relative py-6 group">
@@ -115,7 +128,7 @@ const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
         <div className="tape absolute -bottom-2 right-1/4 w-16 h-8 rotate-6 opacity-70"></div>
         
         <div className="p-3 bg-white border-2 border-black brutalist-shadow transition-all duration-500 relative overflow-hidden hover:rotate-1">
-          {page.isUserContribution && page.image && !page.image.includes('unsplash') ? (
+          {page.image ? (
             <img 
               src={page.image} 
               alt={page.title} 
@@ -125,35 +138,36 @@ const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
             <TypographicPlaceholder title={page.title} script={page.vibe} />
           )}
           
-          <div className="p-4 flex justify-between items-center border-t border-black/5 mt-2 bg-slate-50/50">
+          <div className="p-4 flex flex-wrap justify-between items-center border-t border-black/5 mt-2 bg-slate-50/50 gap-2">
             <div className="flex items-center gap-2">
               <MapPin size={14} className="text-[#cc543a]" />
               <span className="text-[10px] font-black uppercase tracking-widest text-black">{page.location}</span>
             </div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Archive Ref #0{page.id}</span>
+            <div className="flex items-center gap-2">
+              <User size={12} className="text-slate-400" />
+              <span className="text-[9px] font-black uppercase text-slate-500 tracking-tighter">Contributor: {page.contributorName || page.imageSource}</span>
+            </div>
           </div>
         </div>
 
-        <div className="mt-4 px-4 py-3 bg-slate-100/50 border-l-4 border-black/10 hover:bg-white hover:border-[#cc543a] transition-all">
-          <a 
-            href={page.sourceUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-[#cc543a] transition-colors"
-          >
-            <Link2 size={14} /> View Reference Archive
-          </a>
-          <p className="text-[9px] text-slate-400 mt-1 italic">Typographic study: {page.imageSource}</p>
-        </div>
-
-        <div className={`absolute ${isEven ? '-left-8' : '-right-8'} top-1/2 -translate-y-1/2 hidden lg:block z-20`}>
-           <div className="bg-[#cc543a] text-white p-4 brutalist-shadow transform rotate-6 border-2 border-black">
-              <Hash size={24} className="mb-2" />
-              <p className="handwritten text-lg font-bold leading-tight">
-                Artifact <br/> Specimen
-              </p>
-           </div>
-        </div>
+        {hasValidUrl && (
+          <div className="mt-4 px-4 py-4 bg-white border-l-4 border-[#cc543a] brutalist-shadow-sm hover:translate-x-1 transition-all">
+            <a 
+              href={targetUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center justify-between group/link"
+            >
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-[#cc543a] mb-1">Extended Context</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.1em] text-black flex items-center gap-2 group-hover/link:text-[#cc543a] transition-colors">
+                  <Link2 size={12} /> Read More / View Archive
+                </span>
+              </div>
+              <ArrowUpRight size={20} className="text-[#cc543a] group-hover/link:translate-x-1 group-hover/link:-translate-y-1 transition-transform" />
+            </a>
+          </div>
+        )}
       </div>
 
       <div className="w-full md:w-2/5 flex flex-col space-y-8">
@@ -205,7 +219,7 @@ const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
             <div className="animate-in fade-in duration-500 space-y-8">
               <div className="space-y-3">
                 <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#cc543a] flex items-center gap-3">
-                  <span className="w-10 h-0.5 bg-[#cc543a]"></span> Typographic Scan
+                  <span className="w-10 h-0.5 bg-[#cc543a]"></span> Museum Context
                 </h4>
                 <p className={`text-xl leading-snug font-medium text-slate-900 ${langClass}`}>
                   {translatedContent ? translatedContent.context : page.culturalContext}
@@ -213,19 +227,13 @@ const ZinePage: React.FC<ZinePageProps> = ({ page }) => {
               </div>
               
               <div className="bg-[#f8f5f0] p-8 border-4 border-black border-dashed relative">
-                <div className="absolute -top-3 left-4 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">Artifact Footnote</div>
+                <div className="absolute -top-3 left-4 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">Archival Record</div>
                 <p className={`serif text-lg leading-relaxed text-slate-700 italic ${langClass}`}>
                   {translatedContent ? translatedContent.note : page.historicalNote}
                 </p>
               </div>
             </div>
           )}
-        </div>
-
-        <div className="pt-8 border-t-2 border-black/5">
-          <a href={page.readMoreUrl} target="_blank" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-black hover:text-[#cc543a]">
-            Explore Archives <ExternalLink size={12} />
-          </a>
         </div>
       </div>
     </div>

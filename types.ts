@@ -11,11 +11,13 @@ export interface ZinePageData {
   vibe: string;
   readMoreUrl: string;
   isUserContribution?: boolean;
+  contributorName?: string;
 }
 
 export enum AppMode {
   EXPLORE = 'EXPLORE',
   CONTRIBUTE = 'CONTRIBUTE',
   ABOUT = 'ABOUT',
-  GUIDEBOOK = 'GUIDEBOOK'
+  GUIDEBOOK = 'GUIDEBOOK',
+  MAP = 'MAP'
 }
