@@ -23,7 +23,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ts-rs = { version = "12.0", features = ["uuid-impl", "chrono-impl", "serde-compat"] }
 ort = { version = "2.0.0-rc.11", features = ["ndarray", "download-binaries"] }
-ndarray = "0.17"
+ndarray = "0.15"
 image = { version = "0.25", features = ["jpeg", "png"] }
 aws-config = "1.1"
 aws-sdk-s3 = "1.122"
@@ -37,4 +37,4 @@ lazy_static = "1.5"
 regex = "1.11"
 
 [dev-dependencies]
-mockall = "0.13"
+mockall = "0.14"
