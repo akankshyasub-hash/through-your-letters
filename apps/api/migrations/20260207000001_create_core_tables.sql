@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- Cities table
 CREATE TABLE cities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    id UUID PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     country_code VARCHAR(2) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -12,7 +12,7 @@ CREATE TABLE cities (
 
 -- Letterings table
 CREATE TABLE letterings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    id UUID PRIMARY KEY,
     city_id UUID NOT NULL REFERENCES cities(id),
     contributor_tag VARCHAR(30) NOT NULL,
     image_url TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE letterings (
 
 -- Likes table
 CREATE TABLE likes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    id UUID PRIMARY KEY,
     lettering_id UUID NOT NULL REFERENCES letterings(id) ON DELETE CASCADE,
     user_ip INET NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -46,7 +46,7 @@ CREATE TABLE likes (
 
 -- Comments table
 CREATE TABLE comments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    id UUID PRIMARY KEY,
     lettering_id UUID NOT NULL REFERENCES letterings(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     user_ip INET,

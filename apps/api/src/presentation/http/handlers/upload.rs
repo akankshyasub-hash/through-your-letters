@@ -8,6 +8,7 @@ use crate::{application::upload_lettering::{dto::UploadLetteringRequest, use_cas
 #[derive(Debug, Serialize)]
 pub struct UploadResponse {
     pub id: Uuid,
+    pub url: String,
     pub status: String,
     pub message: String,
 }
@@ -47,6 +48,14 @@ pub async fn upload_lettering(State(state): State<AppState>, mut multipart: Mult
         uploaded_by_ip: None,
     };
 
-    let lettering = use_case.execute(request).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(UploadResponse { id: lettering.id, status: "processing".into(), message: "Upload successful".into() }))
+    let lettering = use_case.execute(request).await.map_err(|e| {
+        tracing::error!("Upload failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(UploadResponse { 
+        id: lettering.id, 
+        url: lettering.image_url.clone(), 
+        status: "processing".into(), 
+        message: "Upload successful".into() 
+    }))
 }

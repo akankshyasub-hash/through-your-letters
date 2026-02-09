@@ -1,51 +1,74 @@
-use anyhow::Result;
-use aws_config::{BehaviorVersion, Region};
-use aws_credential_types::Credentials;
-use aws_sdk_s3::{Client, primitives::ByteStream};
-use bytes::Bytes;
-use uuid::Uuid;
+use async_trait::async_trait;
+use aws_sdk_s3::{Client, primitives::ByteStream, config::BehaviorVersion};
+use super::traits::StorageService;
 
 pub struct R2StorageService {
     client: Client,
-    bucket_name: String,
+    bucket: String,
     public_url: String,
 }
 
 impl R2StorageService {
     pub async fn new(
-        access_key_id: String,
-        secret_access_key: String,
+        access_key: String,
+        secret_key: String,
         endpoint: String,
-        bucket_name: String,
-        region: String,
+        bucket: String,
         public_url: String,
-    ) -> Result<Self> {
-        let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "r2-static");
-        let config = aws_config::defaults(BehaviorVersion::latest())
-            .region(Region::new(region))
-            .endpoint_url(endpoint)
+    ) -> anyhow::Result<Self> {
+        let credentials = aws_sdk_s3::config::Credentials::new(
+            access_key,
+            secret_key,
+            None,
+            None,
+            "r2-credentials",
+        );
+        
+        let config = aws_sdk_s3::config::Builder::new()
+            // FIX: Explicitly set the behavior version to 'latest'
+            .behavior_version(BehaviorVersion::latest())
             .credentials_provider(credentials)
-            .load()
-            .await;
-        let client = Client::new(&config);
-        Ok(Self { client, bucket_name, public_url })
+            .endpoint_url(endpoint)
+            .region(aws_sdk_s3::config::Region::new("auto"))
+            .build();
+        
+        let client = Client::from_conf(config);
+        
+        Ok(Self {
+            client,
+            bucket,
+            public_url,
+        })
     }
+}
 
-    pub async fn upload_image(&self, image_data: Bytes, city_id: Uuid, lettering_id: Uuid, content_type: &str) -> Result<String> {
-        let key = format!("{}/{}.jpg", city_id, lettering_id);
-        self.client.put_object()
-            .bucket(&self.bucket_name)
-            .key(&key)
-            .body(ByteStream::from(image_data))
+#[async_trait]
+impl StorageService for R2StorageService {
+    async fn upload(&self, key: &str, data: Vec<u8>, content_type: &str) -> anyhow::Result<String> {
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .body(ByteStream::from(data))
             .content_type(content_type)
             .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("Upload failed: {}", e))?;
-        Ok(format!("{}/{}", self.public_url, key))
+            .await?;
+        
+        Ok(self.get_url(key))
     }
-
-    pub async fn delete_image(&self, key: &str) -> Result<()> {
-        self.client.delete_object().bucket(&self.bucket_name).key(key).send().await?;
+    
+    async fn delete(&self, key: &str) -> anyhow::Result<()> {
+        self.client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await?;
+        
         Ok(())
+    }
+    
+    fn get_url(&self, key: &str) -> String {
+        format!("{}/{}", self.public_url, key)
     }
 }

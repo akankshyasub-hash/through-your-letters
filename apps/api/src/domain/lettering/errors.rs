@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 #[ts(export)]
 pub enum DomainError {
     #[error("Not found")]
-    NotFound,
+    NotFound(String),
     #[error("Validation error: {0}")]
     ValidationError(String),
     #[error("Infrastructure error: {0}")]

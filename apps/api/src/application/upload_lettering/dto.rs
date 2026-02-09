@@ -1,9 +1,8 @@
 use bytes::Bytes;
-use serde::{Deserialize, Serialize};
 use sqlx::types::ipnetwork::IpNetwork;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct UploadLetteringRequest {
     pub city_id: Uuid,
     pub contributor_tag: String,

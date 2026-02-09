@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref PIN_CODE_REGEX: regex::Regex = regex::Regex::new(r"^56\d{4}$").unwrap();
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PinCode {
-    #[validate(regex = "PIN_CODE_REGEX")]
+    #[validate(regex(path = *PIN_CODE_REGEX))]
     pub value: String,
-}
-
-lazy_static::lazy_static! {
-    static ref PIN_CODE_REGEX: regex::Regex = regex::Regex::new(r"^56\d{4}$").unwrap();
 }
 
 impl PinCode {
