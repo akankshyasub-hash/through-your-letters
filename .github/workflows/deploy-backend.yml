@@ -1,0 +1,26 @@
+name: Deploy Backend to Render
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/deploy-backend.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Render auto-deploys on git push
+      # No action needed - just push to main branch
+      
+      # Optional: Trigger manual deploy
+      - name: Trigger Render Deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+        if: secrets.RENDER_DEPLOY_HOOK != ''
+
+# NOTE: Render auto-deploys from GitHub
+# Optionally set RENDER_DEPLOY_HOOK secret for manual triggers
