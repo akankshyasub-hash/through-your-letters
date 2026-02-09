@@ -32,7 +32,7 @@
   "files": [],
   "references": [
     { "path": "apps/web" },
-    { "path": "apps/mobile" },
+    // { "path": "apps/mobile" },
     { "path": "packages/types" },
     { "path": "packages/validation" },
     { "path": "packages/utils" },
