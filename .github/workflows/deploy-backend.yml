@@ -18,9 +18,8 @@ jobs:
       
       # Optional: Trigger manual deploy
       - name: Trigger Render Deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        if: env.RENDER_DEPLOY_HOOK != ''
         run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-        if: secrets.RENDER_DEPLOY_HOOK != ''
-
-# NOTE: Render auto-deploys from GitHub
-# Optionally set RENDER_DEPLOY_HOOK secret for manual triggers
+          curl -X POST "${{ env.RENDER_DEPLOY_HOOK }}"
