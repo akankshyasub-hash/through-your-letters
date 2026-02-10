@@ -55,3 +55,5 @@ export interface LetteringResponse {
   commentsCount: number;
   createdAt: string;
 }
+s
+export type Lettering = LetteringResponse;
