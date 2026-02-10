@@ -23,16 +23,16 @@ export enum AppMode {
 }
 
 export interface LetteringUploadRequest {
-  contributorTag: string;
-  pinCode: string;
+  contributor_tag: string;
+  pin_code: string;
   latitude?: number;
   longitude?: number;
 }
 
 export interface LetteringResponse {
   id: string;
-  imageUrl: string;
-  thumbnailUrls: {
+  image_url: string;
+  thumbnail_urls: {
     small: string;
     medium: string;
     large: string;
@@ -41,19 +41,20 @@ export interface LetteringResponse {
     type: string;
     coordinates: [number, number];
   };
-  pinCode: string;
-  contributorTag: string;
-  detectedText?: string;
-  mlMetadata?: {
+  pin_code: string;
+  contributor_tag: string;
+  detected_text?: string;
+  ml_metadata?: {
     style?: string;
     script?: string;
     confidence?: number;
-    colorPalette?: string[];
+    color_palette?: string[];
   };
   status: "PENDING" | "APPROVED" | "REJECTED";
-  likesCount: number;
-  commentsCount: number;
-  createdAt: string;
+  likes_count: number;
+  comments_count: number;
+  created_at: string;
+  updated_at?: string;
 }
-s
+
 export type Lettering = LetteringResponse;
