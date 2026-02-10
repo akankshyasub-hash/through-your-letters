@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 use crate::infrastructure::{
     ml::onnx_text_detector::OnnxTextDetector, ml::traits::MlService,
-    queue::redis_queue::RedisQueue, storage::r2_storage_service::R2StorageService,
+    queue::redis_queue::RedisQueue,
 };
 use sqlx::PgPool;
 use std::{sync::Arc, time::Duration};
@@ -20,7 +20,6 @@ impl MlProcessor {
     ) -> Self {
         Self {
             db,
-            storage,
             detector,
             queue,
         }

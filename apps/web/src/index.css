@@ -5,118 +5,49 @@
 @tailwind utilities;
 
 :root {
-    --color-paper: #f8f5f0;
-    --color-ink: #1a1a1a;
-    --color-terracotta: #cc543a;
-    --color-forest: #2d5a27;
-    --color-ochre: #d4a017;
-    --color-sky: #7fb3d5;
+  --color-paper: #f8f5f0;
+  --color-ink: #1a1a1a;
 }
 
-@layer base {
-  body {
-      background-color: var(--color-paper);
-      color: var(--color-ink);
-      font-family: 'Space Grotesk', sans-serif;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-  }
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: 'Space Grotesk', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-
-.devanagari { font-family: 'Noto Sans Devanagari', sans-serif; }
-.kannada { font-family: 'Noto Sans Kannada', sans-serif; }
-.bengali { font-family: 'Noto Sans Bengali', sans-serif; }
-.odia { font-family: 'Noto Sans Odia', sans-serif; }
-.gujarati { font-family: 'Noto Sans Gujarati', sans-serif; }
-.gurmukhi { font-family: 'Noto Sans Gurmukhi', sans-serif; }
-.telugu { font-family: 'Noto Sans Telugu', sans-serif; }
-.malayalam { font-family: 'Noto Sans Malayalam', sans-serif; }
-.olchiki { font-family: 'Noto Sans Ol Chiki', sans-serif; }
-.urdu { font-family: 'Noto Nastaliq Urdu', serif; }
-.serif { font-family: 'Crimson Pro', serif; }
-.handwritten { font-family: 'Architects Daughter', cursive; }
 
 .zine-texture {
-    background-image: url("https://www.transparenttextures.com/patterns/recycled-paper-texture.png");
+  background-image: url("https://www.transparenttextures.com/patterns/recycled-paper-texture.png");
 }
 
 .grain-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none;
-    opacity: 0.05;
-    z-index: 999;
-    background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  opacity: 0.04;
+  z-index: 999;
+  background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
 }
 
-.brutalist-shadow {
-    box-shadow: 6px 6px 0px 0px var(--color-ink);
-}
-
-.brutalist-shadow-sm {
-    box-shadow: 3px 3px 0px 0px var(--color-ink);
-}
-
-.brutalist-shadow-lg {
-    box-shadow: 10px 10px 0px 0px var(--color-ink);
-}
+.brutalist-shadow { box-shadow: 6px 6px 0px 0px var(--color-ink); }
+.brutalist-shadow-sm { box-shadow: 3px 3px 0px 0px var(--color-ink); }
+.brutalist-shadow-lg { box-shadow: 10px 10px 0px 0px var(--color-ink); }
 
 .tape {
-    background: rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(2px);
-    border: 1px solid rgba(0,0,0,0.05);
-    transform: rotate(-2deg);
-    z-index: 10;
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(2px);
+  border: 1px solid rgba(0,0,0,0.05);
+  z-index: 10;
 }
 
-@keyframes wobble {
-    0% { transform: rotate(-1deg); }
-    50% { transform: rotate(1deg); }
-    100% { transform: rotate(-1deg); }
-}
-.animate-wobble { animation: wobble 3s ease-in-out infinite; }
-
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-ink); }
-
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
-}
-.no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
+.handwritten { font-family: 'Architects Daughter', cursive; }
+.serif { font-family: 'Crimson Pro', serif; }
+.kannada { font-family: 'Noto Sans Kannada', sans-serif; }
+.urdu { font-family: 'Noto Nastaliq Urdu', serif; }
+.devanagari { font-family: 'Noto Sans Devanagari', sans-serif; }
 
 .pixel-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-    gap: 2px;
-}
-
-.animate-in {
-  animation: fadeIn 0.2s ease-in;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.zoom-in-90 {
-  animation: zoomIn 0.2s ease-out;
-}
-
-@keyframes zoomIn {
-  from {
-    transform: scale(0.9);
-  }
-  to {
-    transform: scale(1);
-  }
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 4px;
 }

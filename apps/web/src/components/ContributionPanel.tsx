@@ -1,298 +1,129 @@
 import React, { useState, useRef } from 'react';
-import { ZinePageData } from '../types';
-import { Upload, X, MapPin, User, Image as ImageIcon, Loader2, AlignLeft } from 'lucide-react';
-import { API_BASE_URL } from '../constants';
+import { Upload, X, Loader2, User, MapPin, AlignLeft } from 'lucide-react';
+import { API_BASE_URL, AREA_PIN_MAP, PIN_AREA_MAP } from '../constants';
 import { useToastStore } from '../store/useToastStore';
 
-interface ContributionPanelProps {
-  onSubmit: (entry: ZinePageData) => void;
-  onCancel: () => void;
-}
-
-const ContributionPanel: React.FC<ContributionPanelProps> = ({ onSubmit, onCancel }) => {
-  const [contributorName, setContributorName] = useState('');
-  const [description, setDescription] = useState('');
-  const [pinCode, setPinCode] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
+const ContributionPanel: React.FC<{onCancel: () => void, onSubmit: () => void}> = ({ onCancel, onSubmit }) => {
   const { addToast } = useToastStore();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  
+  const [form, setForm] = useState({ name: '', area: 'Other', pin: '', desc: '' });
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 20 * 1024 * 1024) {
-      addToast('File size must be less than 20MB', 'error');
-      return;
-    }
-
-    if (!['image/jpeg', 'image/png', 'image/heic'].includes(file.type)) {
-      addToast('Only JPEG, PNG, and HEIC files are supported', 'error');
-      return;
-    }
-
-    setSelectedFile(file);
-    
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreviewUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handlePinChange = (val: string) => {
+    const pin = val.replace(/\D/g, '').substring(0, 6);
+    const matchedArea = PIN_AREA_MAP[pin] || 'Other';
+    setForm(prev => ({ ...prev, pin, area: matchedArea }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAreaChange = (val: string) => {
+    const matchedPin = AREA_PIN_MAP[val] || '';
+    setForm(prev => ({ ...prev, area: val, pin: matchedPin || prev.pin }));
+  };
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) return addToast("Geolocation not supported", "error");
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+        const data = await res.json();
+        const pc = data.address.postcode?.replace(/\s/g, '').substring(0, 6);
+        if (pc) handlePinChange(pc);
+      } catch (e) { addToast("Auto-detect failed", "error"); }
+      finally { setIsLocating(false); }
+    });
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (isUploading) {
-      return;
-    }
+    if (!file) return addToast("Artifact image required", "error");
+    setLoading(true);
 
-    if (!selectedFile) {
-      addToast('Please select an image', 'error');
-      return;
-    }
-
-    if (!contributorName.trim()) {
-      addToast('Please enter your contributor name', 'error');
-      return;
-    }
-
-    if (!pinCode.trim() || !/^56\d{4}$/.test(pinCode)) {
-      addToast('Please enter a valid Bengaluru PIN code (560xxx)', 'error');
-      return;
-    }
-
-    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('contributor_tag', form.name);
+    formData.append('pin_code', form.pin);
+    formData.append('description', form.desc);
+    formData.append('city_id', '0194f123-4567-7abc-8def-0123456789ab');
 
     try {
-      const formData = new FormData();
-      formData.append('image', selectedFile);
-      formData.append('contributor_tag', contributorName.trim());
-      formData.append('pin_code', pinCode.trim());
-      formData.append('city_id', '0194f123-4567-7abc-8def-0123456789ab'); // Bengaluru ID hardcoded
-      
-      if (description.trim()) {
-        formData.append('description', description.trim());
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/v1/letterings/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Upload failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      const newEntry: ZinePageData = {
-        id: data.id || `local_${Date.now()}`,
-        title: description.trim() ? "User Description" : 'Untitled',
-        location: pinCode,
-        culturalContext: 'User contribution',
-        historicalNote: `Contributed by ${contributorName}`,
-        image: data.url || previewUrl || '',
-        imageSource: contributorName,
-        sourceUrl: '',
-        vibe: 'Community',
-        readMoreUrl: '',
-        isUserContribution: true,
-        contributorName: contributorName,
-        description: description.trim(),
-      };
-
-      onSubmit(newEntry);
-      
-      // Reset form
-      setContributorName('');
-      setDescription('');
-      setPinCode('');
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      
-      addToast('Upload successful! Your contribution will appear in the gallery after processing.', 'success', 5000);
-      
-    } catch (err) {
-      console.error('Upload error:', err);
-      addToast(err instanceof Error ? err.message : 'Upload failed. Please try again.', 'error');
-    } finally {
-      setIsUploading(false);
-    }
+      const res = await fetch(`${API_BASE_URL}/api/v1/letterings/upload`, { method: 'POST', body: formData });
+      if (res.ok) {
+        addToast("Artifact submitted successfully", "success");
+        onSubmit();
+      } else throw new Error();
+    } catch (err) { addToast("Network error. Try a smaller image.", "error"); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-24">
-      <div className="space-y-4">
-        <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none">
-          Contribute to the Archive
-        </h1>
-        <p className="text-sm text-slate-600 font-medium max-w-2xl">
-          Share your captured street lettering with the community. All uploads are publicly visible and help preserve urban typography.
-        </p>
+    <div className="max-w-5xl mx-auto space-y-12 animate-in pb-32">
+      <div className="flex justify-between items-center bg-black text-white p-6 brutalist-shadow">
+        <div>
+          <h2 className="text-3xl font-black uppercase tracking-tighter">Contributor Lab</h2>
+          <p className="handwritten text-sm text-[#d4a017] italic">Preserving the city's lettered soul...</p>
+        </div>
+        <button onClick={onCancel} className="p-2 bg-white text-black border-2 border-black hover:bg-[#cc543a] hover:text-white transition-colors"><X /></button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="bg-white border-4 border-black p-8 brutalist-shadow-lg space-y-6">
-          <div className="space-y-4">
-            <label className="block">
-              <div className="flex items-center gap-2 mb-3">
-                <ImageIcon size={20} />
-                <span className="text-sm font-black uppercase tracking-widest">Image</span>
-                <span className="text-xs text-red-600 font-bold">*Required</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="space-y-6">
+          <h4 className="text-xs font-black uppercase bg-[#2d5a27] text-white px-2 py-1 inline-block">Step 01: Capture Lettering</h4>
+          <div onClick={() => fileRef.current?.click()} className="border-4 border-black aspect-[4/3] flex flex-col items-center justify-center bg-white brutalist-shadow-sm cursor-pointer overflow-hidden group">
+            {preview ? <img src={preview} className="w-full h-full object-cover" alt="Preview" /> : (
+              <div className="text-center p-12">
+                <Upload size={48} className="mx-auto mb-4 text-slate-300 group-hover:text-black transition-colors" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tap to mount specimen</p>
               </div>
-              
-              {!previewUrl ? (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="w-full aspect-video border-4 border-dashed border-black bg-slate-50 hover:bg-slate-100 transition-colors flex flex-col items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Upload size={48} className="text-slate-400" />
-                  <div className="text-center">
-                    <p className="text-sm font-bold text-slate-700">Click to upload</p>
-                    <p className="text-xs text-slate-500 mt-1">JPEG, PNG, or HEIC • Max 20MB</p>
-                  </div>
-                </button>
-              ) : (
-                <div className="relative">
-                  <img 
-                    src={previewUrl} 
-                    alt="Preview" 
-                    className="w-full aspect-video object-cover border-4 border-black"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreviewUrl(null);
-                      setSelectedFile(null);
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = '';
-                      }
-                    }}
-                    disabled={isUploading}
-                    className="absolute top-4 right-4 bg-red-600 text-white p-2 border-2 border-black hover:bg-red-700 transition-colors disabled:opacity-50"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              )}
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/heic"
-                onChange={handleFileSelect}
-                disabled={isUploading}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <label className="block">
-              <div className="flex items-center gap-2 mb-3">
-                <User size={20} />
-                <span className="text-sm font-black uppercase tracking-widest">Contributor Tag</span>
-                <span className="text-xs text-red-600 font-bold">*Required</span>
-              </div>
-              <input
-                type="text"
-                value={contributorName}
-                onChange={(e) => setContributorName(e.target.value)}
-                placeholder="@urbanist_blr"
-                disabled={isUploading}
-                className="w-full px-4 py-3 border-2 border-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#cc543a] disabled:opacity-50 disabled:cursor-not-allowed"
-                maxLength={30}
-                required
-              />
-              <p className="text-xs text-slate-500 mt-2">3-30 characters • Alphanumeric only</p>
-            </label>
-
-            <label className="block">
-              <div className="flex items-center gap-2 mb-3">
-                <MapPin size={20} />
-                <span className="text-sm font-black uppercase tracking-widest">PIN Code</span>
-                <span className="text-xs text-red-600 font-bold">*Required</span>
-              </div>
-              <input
-                type="text"
-                value={pinCode}
-                onChange={(e) => setPinCode(e.target.value)}
-                placeholder="560001"
-                disabled={isUploading}
-                className="w-full px-4 py-3 border-2 border-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#cc543a] disabled:opacity-50 disabled:cursor-not-allowed"
-                pattern="^56\d{4}$"
-                maxLength={6}
-                required
-              />
-              <p className="text-xs text-slate-500 mt-2">Bengaluru PIN codes only (560xxx)</p>
-            </label>
-          </div>
-
-          <label className="block">
-            <div className="flex items-center gap-2 mb-3">
-              <AlignLeft size={20} />
-              <span className="text-sm font-black uppercase tracking-widest">Description / Story</span>
-              <span className="text-xs text-slate-500 font-bold">Optional</span>
-            </div>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Tell us about this lettering... Where did you find it? What makes it special?"
-              disabled={isUploading}
-              rows={4}
-              className="w-full px-4 py-3 border-2 border-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#cc543a] disabled:opacity-50 disabled:cursor-not-allowed resize-none"
-              maxLength={500}
-            />
-            <p className="text-xs text-slate-500 mt-2 text-right">{description.length}/500</p>
-          </label>
-        </div>
-
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            disabled={isUploading || !selectedFile}
-            className="flex-1 bg-[#cc543a] text-white px-8 py-4 text-sm font-black uppercase tracking-widest brutalist-shadow-sm hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-          >
-            {isUploading ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <Upload size={20} />
-                Submit to Archive
-              </>
             )}
-          </button>
-          
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isUploading}
-            className="bg-white text-black px-8 py-4 text-sm font-black uppercase tracking-widest border-2 border-black hover:bg-slate-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Cancel
-          </button>
+          </div>
+          <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) { setFile(f); setPreview(URL.createObjectURL(f)); }
+          }} />
         </div>
-      </form>
 
-      <div className="bg-slate-50 border-4 border-black p-6 brutalist-shadow-lg">
-        <h3 className="text-sm font-black uppercase tracking-widest mb-4">Contribution Guidelines</h3>
-        <ul className="space-y-2 text-sm text-slate-700">
-          <li>• Only upload photos you own or have permission to share</li>
-          <li>• Focus on lettering, signage, and typography</li>
-          <li>• Avoid including people's faces</li>
-          <li>• No offensive, illegal, or copyrighted content</li>
-          <li>• All uploads become publicly visible after processing</li>
-        </ul>
+        <form onSubmit={handleUpload} className="bg-white p-8 md:p-10 border-4 border-black brutalist-shadow space-y-8 flex flex-col">
+          <h4 className="text-[10px] font-black uppercase text-[#cc543a]">Step 02: Archive Details</h4>
+          <div className="space-y-6 flex-1">
+            <input placeholder="Contributor Name" className="w-full border-2 border-black p-4 font-black text-sm focus:border-[#cc543a] outline-none" onChange={e => setForm({...form, name: e.target.value})} required />
+            
+            <div className="grid grid-cols-2 gap-4 items-end">
+              <div className="space-y-1">
+                <label className="text-[8px] font-black uppercase text-slate-400">Neighborhood</label>
+                <select 
+                  className="w-full border-2 border-black p-4 font-black bg-white text-sm outline-none"
+                  value={form.area}
+                  onChange={e => handleAreaChange(e.target.value)}
+                >
+                  <option value="Other">Other Area</option>
+                  {Object.keys(AREA_PIN_MAP).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1 relative">
+                <label className="text-[8px] font-black uppercase text-slate-400">PIN Code</label>
+                <input 
+                  placeholder="560xxx" 
+                  className="w-full border-2 border-black p-4 font-black text-sm outline-none pr-10" 
+                  value={form.pin}
+                  onChange={e => handlePinChange(e.target.value)} 
+                  required 
+                />
+                <button type="button" onClick={detectLocation} className="absolute right-3 top-10 text-[#cc543a]">{isLocating ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18}/>}</button>
+              </div>
+            </div>
+
+            <textarea placeholder="Tell the story of this find (material, style, location context)..." className="w-full border-2 border-black p-4 font-medium text-sm focus:border-[#cc543a] outline-none" rows={5} onChange={e => setForm({...form, desc: e.target.value})} />
+          </div>
+          
+          <button type="submit" disabled={loading || !file} className="w-full bg-black text-white py-6 font-black uppercase brutalist-shadow hover:bg-[#cc543a] transition-all disabled:opacity-50">
+            {loading ? <Loader2 className="animate-spin mx-auto" /> : "Finalize Archiving"}
+          </button>
+        </form>
       </div>
     </div>
   );

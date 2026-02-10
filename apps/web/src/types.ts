@@ -5,6 +5,7 @@ export interface ZinePageData {
   culturalContext: string;
   historicalNote: string;
   image: string;
+  thumbnail?: string;
   imageSource: string;
   sourceUrl: string;
   vibe: string;
@@ -12,6 +13,8 @@ export interface ZinePageData {
   isUserContribution?: boolean;
   contributorName?: string;
   description?: string;
+  report_count?: number;
+  report_reasons?: string[];
 }
 
 export enum AppMode {
@@ -23,15 +26,7 @@ export enum AppMode {
   ADMIN = "ADMIN",
 }
 
-export interface LetteringUploadRequest {
-  contributor_tag: string;
-  pin_code: string;
-  latitude?: number;
-  longitude?: number;
-  description?: string;
-}
-
-export interface LetteringResponse {
+export interface Lettering {
   id: string;
   image_url: string;
   thumbnail_urls: {
@@ -50,14 +45,9 @@ export interface LetteringResponse {
   ml_metadata?: {
     style?: string;
     script?: string;
-    confidence?: number;
-    color_palette?: string[];
   };
   status: "PENDING" | "APPROVED" | "REJECTED";
-  likes_count: number;
-  comments_count: number;
   created_at: string;
-  updated_at?: string;
+  report_count?: number;
+  report_reasons?: string[];
 }
-
-export type Lettering = LetteringResponse;
