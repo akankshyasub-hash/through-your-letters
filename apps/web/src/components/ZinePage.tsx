@@ -1,6 +1,6 @@
 import React from 'react';
 import { ZinePageData } from '../types';
-import { MapPin, ExternalLink, Trash2 } from 'lucide-react';
+import { MapPin, ExternalLink, Trash2, AlignLeft } from 'lucide-react';
 
 interface ZinePageProps {
   page: ZinePageData;
@@ -49,6 +49,20 @@ const ZinePage: React.FC<ZinePageProps> = ({ page, onDelete }) => {
           </div>
 
           <div className="space-y-4">
+            {page.description && (
+              <div className="bg-slate-50 p-4 border-l-4 border-black">
+                <div className="flex items-center gap-2 mb-2 text-slate-500">
+                  <AlignLeft size={14} />
+                  <h4 className="text-xs font-black uppercase tracking-widest">
+                    Curator's Note
+                  </h4>
+                </div>
+                <p className="text-base leading-relaxed text-slate-800 font-medium">
+                  {page.description}
+                </p>
+              </div>
+            )}
+
             <div>
               <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
                 Cultural Context

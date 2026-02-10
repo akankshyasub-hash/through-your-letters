@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 use crate::infrastructure::{
     ml::onnx_text_detector::OnnxTextDetector, ml::traits::MlService,
     queue::redis_queue::RedisQueue, storage::r2_storage_service::R2StorageService,

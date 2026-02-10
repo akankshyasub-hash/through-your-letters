@@ -11,6 +11,7 @@ export interface ZinePageData {
   readMoreUrl: string;
   isUserContribution?: boolean;
   contributorName?: string;
+  description?: string;
 }
 
 export enum AppMode {
@@ -27,6 +28,7 @@ export interface LetteringUploadRequest {
   pin_code: string;
   latitude?: number;
   longitude?: number;
+  description?: string;
 }
 
 export interface LetteringResponse {
@@ -44,6 +46,7 @@ export interface LetteringResponse {
   pin_code: string;
   contributor_tag: string;
   detected_text?: string;
+  description?: string;
   ml_metadata?: {
     style?: string;
     script?: string;

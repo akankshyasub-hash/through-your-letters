@@ -8,5 +8,6 @@ pub struct UploadLetteringRequest {
     pub contributor_tag: String,
     pub pin_code: String,
     pub image_data: Bytes,
+    pub description: Option<String>,
     pub uploaded_by_ip: Option<IpNetwork>,
 }

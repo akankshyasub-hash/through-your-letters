@@ -19,6 +19,7 @@ pub async fn upload_lettering(State(state): State<AppState>, mut multipart: Mult
     let mut contributor_tag: Option<String> = None;
     let mut pin_code: Option<String> = None;
     let mut city_id: Option<Uuid> = None;
+    let mut description: Option<String> = None;
 
     while let Some(field) = multipart.next_field().await.map_err(|_| StatusCode::BAD_REQUEST)? {
         let name = field.name().unwrap_or("").to_string();
@@ -34,6 +35,9 @@ pub async fn upload_lettering(State(state): State<AppState>, mut multipart: Mult
                 city_id = Some(Uuid::parse_str(&text).map_err(|_| StatusCode::BAD_REQUEST)?);
                 Span::current().record("city_id", &city_id.unwrap().to_string());
             }
+            "description" => {
+                description = Some(field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?);
+            }
             _ => {}
         }
     }
@@ -45,6 +49,7 @@ pub async fn upload_lettering(State(state): State<AppState>, mut multipart: Mult
         contributor_tag: contributor_tag.ok_or(StatusCode::BAD_REQUEST)?,
         pin_code: pin_code.ok_or(StatusCode::BAD_REQUEST)?,
         image_data: image_data.ok_or(StatusCode::BAD_REQUEST)?,
+        description,
         uploaded_by_ip: None,
     };
 

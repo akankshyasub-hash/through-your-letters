@@ -11,6 +11,9 @@ impl SqlxLetteringRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+    
+    // Helper to map DB row to Lettering struct
+    #[allow(clippy::too_many_arguments)]
     fn map_row_to_lettering(
         &self,
         id: Uuid,
@@ -29,6 +32,7 @@ impl SqlxLetteringRepository {
         likes: i32,
         comments: i32,
         detected_text: Option<String>,
+        description: Option<String>, // Added
         image_hash: Option<String>,
     ) -> Lettering {
         let coords = location_wkt
@@ -57,6 +61,7 @@ impl SqlxLetteringRepository {
             pin_code,
             detected_text,
             ml_metadata: None,
+            description, // Mapped
             is_lettering: true,
             status: match status.as_str() {
                 "APPROVED" => LetteringStatus::Approved,
@@ -84,8 +89,8 @@ impl LetteringRepository for SqlxLetteringRepository {
         sqlx::query!(
             r#"INSERT INTO letterings
             (id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large,
-             location, pin_code, status, uploaded_by_ip, image_hash, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, ST_GeogFromText($8), $9, $10, $11, $12, $13, $14)"#,
+             location, pin_code, status, uploaded_by_ip, image_hash, description, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, ST_GeogFromText($8), $9, $10, $11, $12, $13, $14, $15)"#,
             lettering.id,
             lettering.city_id,
             lettering.contributor_tag,
@@ -98,6 +103,7 @@ impl LetteringRepository for SqlxLetteringRepository {
             format!("{:?}", lettering.status).to_uppercase(),
             lettering.uploaded_by_ip,
             lettering.image_hash,
+            lettering.description,
             lettering.created_at,
             lettering.updated_at,
         )
@@ -114,7 +120,7 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, image_hash
+            likes_count, comments_count, detected_text, description, image_hash
             FROM letterings
             ORDER BY created_at DESC
             LIMIT $1 OFFSET $2"#,
@@ -144,6 +150,7 @@ impl LetteringRepository for SqlxLetteringRepository {
                 row.likes_count,
                 row.comments_count,
                 row.detected_text,
+                row.description,
                 row.image_hash,
             ));
         }
@@ -157,7 +164,7 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, image_hash
+            likes_count, comments_count, detected_text, description, image_hash
             FROM letterings WHERE id = $1"#,
             id
         )
@@ -183,6 +190,7 @@ impl LetteringRepository for SqlxLetteringRepository {
                 r.likes_count,
                 r.comments_count,
                 r.detected_text,
+                r.description,
                 r.image_hash,
             )
         }))
@@ -217,12 +225,13 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, image_hash
+            likes_count, comments_count, detected_text, description, image_hash
             FROM letterings
             WHERE detected_text_tsv @@ to_tsquery('english', $1)
                OR contributor_tag ILIKE $2
                OR pin_code ILIKE $2
                OR detected_text ILIKE $2
+               OR description ILIKE $2
             ORDER BY created_at DESC
             LIMIT 50"#,
             tsquery,
@@ -251,6 +260,7 @@ impl LetteringRepository for SqlxLetteringRepository {
                 row.likes_count,
                 row.comments_count,
                 row.detected_text,
+                row.description,
                 row.image_hash,
             ));
         }
@@ -276,7 +286,7 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, image_hash
+            likes_count, comments_count, detected_text, description, image_hash
             FROM letterings WHERE image_hash = $1"#,
             hash
         )
@@ -302,6 +312,7 @@ impl LetteringRepository for SqlxLetteringRepository {
                 r.likes_count,
                 r.comments_count,
                 r.detected_text,
+                r.description,
                 r.image_hash,
             )
         }))

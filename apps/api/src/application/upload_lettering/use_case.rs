@@ -31,14 +31,12 @@ impl UploadLetteringUseCase {
     }
 
     pub async fn execute(&self, request: UploadLetteringRequest) -> Result<Lettering, String> {
-        // Compute SHA256 hash of the raw image bytes for deduplication
         let image_hash = {
             let mut hasher = Sha256::new();
             hasher.update(&request.image_data);
             format!("{:x}", hasher.finalize())
         };
 
-        // Check for duplicate image
         if let Some(existing) = self
             .repository
             .find_by_image_hash(&image_hash)
@@ -80,6 +78,7 @@ impl UploadLetteringUseCase {
             pin_code: request.pin_code,
             detected_text: None,
             ml_metadata: None,
+            description: request.description,
             is_lettering: true,
             status: LetteringStatus::Pending,
             likes_count: 0,

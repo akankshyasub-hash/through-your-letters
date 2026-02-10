@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { AppMode, ZinePageData } from "./types";
+import { AppMode, ZinePageData, Lettering } from "./types";
 import { ZINE_PAGES, API_BASE_URL } from "./constants";
 import ZinePage from "./components/ZinePage";
 import ContributionPanel from "./components/ContributionPanel";
 import Header from "./components/Header";
 import MapSection from "./components/MapSection";
 import AdminPanel from "./components/AdminPanel";
+import ToastContainer from "./components/ui/ToastContainer";
+import { useToastStore } from "./store/useToastStore"; // Added import
 import {
+  Puzzle,
   Type,
   Heart,
-  Puzzle,
   Map as MapIcon,
   Loader2,
   PlusCircle,
@@ -21,12 +23,7 @@ const SCRIPT_SPECIMENS = [
   { char: "କ", lang: "Odia", font: "odia", color: "bg-black" },
   { char: "ଥ", lang: "Odia", font: "odia", color: "bg-[#2d5a27]" },
   { char: "ଲ", lang: "Odia", font: "odia", color: "bg-[#d4a017]" },
-  {
-    char: "ಅ",
-    lang: "Kannada",
-    font: "kannada",
-    color: "bg-slate-200 text-black",
-  },
+  { char: "ಅ", lang: "Kannada", font: "kannada", color: "bg-slate-200 text-black" },
   { char: "ಕ", lang: "Kannada", font: "kannada", color: "bg-black" },
   { char: "ಖ", lang: "Kannada", font: "kannada", color: "bg-[#cc543a]" },
   { char: "ಘ", lang: "Kannada", font: "kannada", color: "bg-slate-800" },
@@ -34,21 +31,21 @@ const SCRIPT_SPECIMENS = [
   { char: "क", lang: "Hindi", font: "devanagari", color: "bg-slate-800" },
   { char: "ह", lang: "Marathi", font: "devanagari", color: "bg-black" },
   { char: "അ", lang: "Malayalam", font: "malayalam", color: "bg-[#2d5a27]" },
-  { char: "କ", lang: "Malayalam", font: "malayalam", color: "bg-[#d4a017]" },
+  { char: "ക", lang: "Malayalam", font: "malayalam", color: "bg-[#d4a017]" },
   { char: "ಅ", lang: "Telugu", font: "telugu", color: "bg-black" },
-  { char: "କ", lang: "Telugu", font: "telugu", color: "bg-[#cc543a]" },
-  { char: "அ", lang: "Tamil", font: "latin", color: "bg-slate-200 text-black" },
-  { char: "க", lang: "Tamil", font: "latin", color: "bg-[#2d5a27]" },
+  { char: "క", lang: "Telugu", font: "telugu", color: "bg-[#cc543a]" },
+  { char: "அ", lang: "Tamil", font: "tamil", color: "bg-slate-200 text-black" },
+  { char: "க", lang: "Tamil", font: "tamil", color: "bg-[#2d5a27]" },
   { char: "অ", lang: "Bengali", font: "bengali", color: "bg-[#d4a017]" },
-  { char: "କ", lang: "Bengali", font: "bengali", color: "bg-black" },
+  { char: "ক", lang: "Bengali", font: "bengali", color: "bg-black" },
   { char: "ਅ", lang: "Punjabi", font: "gurmukhi", color: "bg-[#cc543a]" },
-  { char: "କ", lang: "Punjabi", font: "gurmukhi", color: "bg-slate-800" },
+  { char: "ਕ", lang: "Punjabi", font: "gurmukhi", color: "bg-slate-800" },
   { char: "અ", lang: "Gujarati", font: "gujarati", color: "bg-black" },
-  { char: "ಕ", lang: "Gujarati", font: "gujarati", color: "bg-[#2d5a27]" },
+  { char: "ક", lang: "Gujarati", font: "gujarati", color: "bg-[#2d5a27]" },
   { char: "ا", lang: "Urdu", font: "urdu", color: "bg-[#d4a017]" },
   { char: "ک", lang: "Urdu", font: "urdu", color: "bg-black" },
   { char: "ᱚ", lang: "Santhali", font: "olchiki", color: "bg-[#cc543a]" },
-  { char: "ꯀ", lang: "Manipuri", font: "latin", color: "bg-slate-800" },
+  { char: "ꯀ", lang: "Manipuri", font: "meiteimayek", color: "bg-slate-800" },
   { char: "A", lang: "Latin", font: "", color: "bg-slate-100 text-black" },
 ];
 
@@ -106,8 +103,8 @@ const App: React.FC = () => {
   });
   const [contributions, setContributions] = useState<ZinePageData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { addToast } = useToastStore(); // Hook initialized
 
-  // Senior Engineer approach: Pull data from the source of truth (the DB)
   const fetchGallery = async () => {
     try {
       setIsLoading(true);
@@ -118,16 +115,12 @@ const App: React.FC = () => {
       if (!response.ok) throw new Error("Failed to fetch gallery");
 
       const data = await response.json();
-
-      // Defensively handle the Rust PaginatedResponse format
-      // data.letterings matches your get_letterings/dto.rs
-      const rawItems = data.letterings || [];
+      const rawItems: Lettering[] = data.letterings || [];
 
       const backendContributions: ZinePageData[] = rawItems.map(
-        (item: any) => ({
+        (item) => ({
           id: item.id,
-          // Entity names are snake_case in Rust
-          title: `${item.contributor_tag}'s Discovery` || "Untitled Specimen",
+          title: item.description ? "User Description" : (`${item.contributor_tag}'s Discovery` || "Untitled Specimen"),
           location: item.pin_code,
           culturalContext: item.detected_text || "Archived street lettering",
           historicalNote: `Status: ${item.status}. Archived on ${new Date(item.created_at).toLocaleDateString()}`,
@@ -138,13 +131,13 @@ const App: React.FC = () => {
           readMoreUrl: "",
           isUserContribution: true,
           contributorName: item.contributor_tag,
+          description: item.description,
         }),
       );
 
       setContributions(backendContributions);
     } catch (err) {
-      console.error("Gallery fetch error:", err);
-      // Fallback: Check local storage only if API is unreachable
+      console.error("Gallery fetch fetch error:", err);
       const saved = localStorage.getItem("blr_lettering_contributions");
       if (saved) {
         setContributions(JSON.parse(saved));
@@ -165,7 +158,6 @@ const App: React.FC = () => {
   const handleDeleteContribution = async (id: string | number) => {
     if (window.confirm("Are you sure you want to remove this specimen?")) {
       try {
-        // Only attempt API delete for real IDs
         if (typeof id === "string" && id.length > 20) {
           const response = await fetch(
             `${API_BASE_URL}/api/v1/letterings/${id}`,
@@ -175,9 +167,10 @@ const App: React.FC = () => {
         }
 
         setContributions((prev) => prev.filter((c) => c.id !== id));
+        addToast("Specimen deleted successfully.", "success");
       } catch (e) {
         console.error("Delete failed", e);
-        alert("Could not delete from archive. Please try again.");
+        addToast("Could not delete from archive. Please try again.", "error");
       }
     }
   };
@@ -187,6 +180,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col max-w-6xl mx-auto bg-white/40 shadow-2xl relative border-x-4 border-black zine-texture transition-colors duration-300">
       <Header mode={mode} setMode={setMode} />
+      
+      <ToastContainer />
 
       <main className="flex-1 overflow-y-auto px-6 md:px-16 py-16 relative">
         {mode === AppMode.EXPLORE && (

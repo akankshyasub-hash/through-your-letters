@@ -16,6 +16,7 @@ pub struct Lettering {
     pub pin_code: String,
     pub detected_text: Option<String>,
     pub ml_metadata: Option<ImageMetadata>,
+    pub description: Option<String>,
     pub is_lettering: bool,
     pub status: LetteringStatus,
     pub likes_count: i32,

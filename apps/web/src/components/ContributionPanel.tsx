@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { ZinePageData } from '../types';
-import { Upload, X, MapPin, User, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Upload, X, MapPin, User, Image as ImageIcon, Loader2, AlignLeft } from 'lucide-react';
 import { API_BASE_URL } from '../constants';
+import { useToastStore } from '../store/useToastStore';
 
 interface ContributionPanelProps {
   onSubmit: (entry: ZinePageData) => void;
@@ -10,30 +11,30 @@ interface ContributionPanelProps {
 
 const ContributionPanel: React.FC<ContributionPanelProps> = ({ onSubmit, onCancel }) => {
   const [contributorName, setContributorName] = useState('');
-  const [location, setLocation] = useState('');
+  const [description, setDescription] = useState('');
   const [pinCode, setPinCode] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { addToast } = useToastStore();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     if (file.size > 20 * 1024 * 1024) {
-      setError('File size must be less than 20MB');
+      addToast('File size must be less than 20MB', 'error');
       return;
     }
 
     if (!['image/jpeg', 'image/png', 'image/heic'].includes(file.type)) {
-      setError('Only JPEG, PNG, and HEIC files are supported');
+      addToast('Only JPEG, PNG, and HEIC files are supported', 'error');
       return;
     }
 
     setSelectedFile(file);
-    setError(null);
     
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -50,32 +51,31 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onSubmit, onCance
     }
 
     if (!selectedFile) {
-      setError('Please select an image');
+      addToast('Please select an image', 'error');
       return;
     }
 
     if (!contributorName.trim()) {
-      setError('Please enter your contributor name');
+      addToast('Please enter your contributor name', 'error');
       return;
     }
 
     if (!pinCode.trim() || !/^56\d{4}$/.test(pinCode)) {
-      setError('Please enter a valid Bengaluru PIN code (560xxx)');
+      addToast('Please enter a valid Bengaluru PIN code (560xxx)', 'error');
       return;
     }
 
     setIsUploading(true);
-    setError(null);
 
     try {
       const formData = new FormData();
       formData.append('image', selectedFile);
       formData.append('contributor_tag', contributorName.trim());
       formData.append('pin_code', pinCode.trim());
-      formData.append('city_id', '0194f123-4567-7abc-8def-0123456789ab');
+      formData.append('city_id', '0194f123-4567-7abc-8def-0123456789ab'); // Bengaluru ID hardcoded
       
-      if (location.trim()) {
-        formData.append('location_name', location.trim());
+      if (description.trim()) {
+        formData.append('description', description.trim());
       }
 
       const response = await fetch(`${API_BASE_URL}/api/v1/letterings/upload`, {
@@ -92,7 +92,7 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onSubmit, onCance
 
       const newEntry: ZinePageData = {
         id: data.id || `local_${Date.now()}`,
-        title: location.trim() || 'Untitled',
+        title: description.trim() ? "User Description" : 'Untitled',
         location: pinCode,
         culturalContext: 'User contribution',
         historicalNote: `Contributed by ${contributorName}`,
@@ -103,21 +103,23 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onSubmit, onCance
         readMoreUrl: '',
         isUserContribution: true,
         contributorName: contributorName,
+        description: description.trim(),
       };
 
       onSubmit(newEntry);
       
+      // Reset form
       setContributorName('');
-      setLocation('');
+      setDescription('');
       setPinCode('');
       setSelectedFile(null);
       setPreviewUrl(null);
       
-      alert('Upload successful! Your contribution will appear in the gallery after processing.');
+      addToast('Upload successful! Your contribution will appear in the gallery after processing.', 'success', 5000);
       
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      addToast(err instanceof Error ? err.message : 'Upload failed. Please try again.', 'error');
     } finally {
       setIsUploading(false);
     }
@@ -235,26 +237,21 @@ const ContributionPanel: React.FC<ContributionPanelProps> = ({ onSubmit, onCance
 
           <label className="block">
             <div className="flex items-center gap-2 mb-3">
-              <MapPin size={20} />
-              <span className="text-sm font-black uppercase tracking-widest">Location Description</span>
+              <AlignLeft size={20} />
+              <span className="text-sm font-black uppercase tracking-widest">Description / Story</span>
               <span className="text-xs text-slate-500 font-bold">Optional</span>
             </div>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g., 8th Cross, Malleshwaram"
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Tell us about this lettering... Where did you find it? What makes it special?"
               disabled={isUploading}
-              className="w-full px-4 py-3 border-2 border-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#cc543a] disabled:opacity-50 disabled:cursor-not-allowed"
-              maxLength={100}
+              rows={4}
+              className="w-full px-4 py-3 border-2 border-black font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#cc543a] disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+              maxLength={500}
             />
+            <p className="text-xs text-slate-500 mt-2 text-right">{description.length}/500</p>
           </label>
-
-          {error && (
-            <div className="bg-red-100 border-2 border-red-600 p-4">
-              <p className="text-sm font-bold text-red-800">{error}</p>
-            </div>
-          )}
         </div>
 
         <div className="flex gap-4">
