@@ -1,12 +1,12 @@
-FROM rust:1.93-slim-bookworm as builder
+FROM rust:1.93-slim-trixie as builder
 
 RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    libpq-dev \
-    g++ \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+  pkg-config \
+  libssl-dev \
+  libpq-dev \
+  g++ \
+  build-essential \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -23,13 +23,13 @@ ENV SQLX_OFFLINE=true
 # Build the release binary
 RUN cargo build --release
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    libpq5 \
-    && rm -rf /var/lib/apt/lists/*
+  ca-certificates \
+  libssl3t64 \
+  libpq5 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

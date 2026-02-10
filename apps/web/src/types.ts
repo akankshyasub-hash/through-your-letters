@@ -48,6 +48,8 @@ export interface Lettering {
   };
   status: "PENDING" | "APPROVED" | "REJECTED";
   created_at: string;
+  likes_count?: number;
+  comments_count?: number;
   report_count?: number;
   report_reasons?: string[];
 }
