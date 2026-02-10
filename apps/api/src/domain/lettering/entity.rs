@@ -22,6 +22,7 @@ pub struct Lettering {
     pub comments_count: i32,
     #[ts(skip)]
     pub uploaded_by_ip: Option<IpNetwork>,
+    pub image_hash: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

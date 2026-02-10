@@ -1,25 +1,24 @@
-use axum::{extract::State, http::StatusCode, Json};
-use sqlx::PgPool;
-use serde::{Serialize, Deserialize};
+use axum::{Json, extract::State};
+use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize)]
+use crate::presentation::http::{errors::AppError, state::AppState};
+
+#[derive(Debug, Serialize)]
 pub struct City {
     pub id: Uuid,
     pub name: String,
     pub country_code: String,
 }
 
-pub async fn list_cities(
-    State(pool): State<PgPool>,
-) -> Result<Json<Vec<City>>, StatusCode> {
+pub async fn list_cities(State(state): State<AppState>) -> Result<Json<Vec<City>>, AppError> {
     let cities = sqlx::query_as!(
         City,
         "SELECT id, name, country_code FROM cities ORDER BY name"
     )
-    .fetch_all(&pool)
+    .fetch_all(&state.db)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
     Ok(Json(cities))
 }

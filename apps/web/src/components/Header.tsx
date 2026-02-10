@@ -1,6 +1,6 @@
-import React from 'react';
-import { AppMode } from '../types';
-import { Compass, PlusCircle, Info, Map as MapIcon, BookOpen } from 'lucide-react';
+import React from "react";
+import { AppMode } from "../types";
+import { Compass, PlusCircle, Info } from "lucide-react";
 
 interface HeaderProps {
   mode: AppMode;
@@ -9,16 +9,16 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ mode, setMode }) => {
   const navItems = [
-    { mode: AppMode.EXPLORE, icon: Compass, label: 'Gallery' },
-    { mode: AppMode.CONTRIBUTE, icon: PlusCircle, label: 'Upload' },
-    { mode: AppMode.ABOUT, icon: Info, label: 'About' },
+    { mode: AppMode.EXPLORE, icon: Compass, label: "Gallery" },
+    { mode: AppMode.CONTRIBUTE, icon: PlusCircle, label: "Upload" },
+    { mode: AppMode.ABOUT, icon: Info, label: "About" },
   ];
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b-4 border-black">
       <div className="px-6 md:px-16 py-6">
         <div className="flex items-center justify-between">
-          <button 
+          <button
             onClick={() => setMode(AppMode.EXPLORE)}
             className="flex items-center gap-3 group"
           >
@@ -39,7 +39,7 @@ const Header: React.FC<HeaderProps> = ({ mode, setMode }) => {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = mode === item.mode;
-              
+
               return (
                 <button
                   key={item.mode}
@@ -47,9 +47,10 @@ const Header: React.FC<HeaderProps> = ({ mode, setMode }) => {
                   className={`
                     flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest
                     border-2 border-black transition-all
-                    ${isActive 
-                      ? 'bg-black text-white' 
-                      : 'bg-white text-black hover:bg-slate-100'
+                    ${
+                      isActive
+                        ? "bg-black text-white"
+                        : "bg-white text-black hover:bg-slate-100"
                     }
                   `}
                 >

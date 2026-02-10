@@ -1,27 +1,41 @@
-use axum::{extract::{State, ConnectInfo}, http::StatusCode, middleware::Next, response::Response};
-use std::{net::SocketAddr, sync::Arc};
+use axum::{
+    extract::State,
+    http::{StatusCode, header},
+    middleware::Next,
+    response::Response,
+};
+use jsonwebtoken::{DecodingKey, Validation, decode};
+use serde::{Deserialize, Serialize};
+
 use crate::presentation::http::state::AppState;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdminClaims {
+    pub sub: String,
+    pub exp: usize,
+}
+
 pub async fn require_admin(
-    State(state): State<Arc<AppState>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<AppState>,
     req: axum::extract::Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let user_ip = addr.ip();
-    
-    let is_admin = sqlx::query_scalar!(
-        "SELECT EXISTS(SELECT 1 FROM admins WHERE ip_address = $1)",
-        sqlx::types::ipnetwork::IpNetwork::from(user_ip)
+    let auth_header = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let _claims = decode::<AdminClaims>(
+        token,
+        &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
+        &Validation::default(),
     )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .unwrap_or(false);
-    
-    if !is_admin {
-        return Err(StatusCode::FORBIDDEN);
-    }
-    
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
     Ok(next.run(req).await)
 }

@@ -1,5 +1,5 @@
-use redis::{Client, AsyncCommands};
-use serde::{Serialize, Deserialize};
+use redis::{AsyncCommands, Client};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +26,7 @@ impl RedisQueue {
 
     pub async fn dequeue_ml_job(&self) -> anyhow::Result<Option<MlJob>> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let result: Option<(String, String)> = conn.brpop("ml_jobs", 1.0).await?;
+        let result: Option<(String, String)> = conn.brpop("ml_jobs", 5.0).await?;
         match result {
             Some((_, job_json)) => Ok(Some(serde_json::from_str(&job_json)?)),
             None => Ok(None),

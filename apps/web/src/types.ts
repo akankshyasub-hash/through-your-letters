@@ -14,11 +14,12 @@ export interface ZinePageData {
 }
 
 export enum AppMode {
-  EXPLORE = 'EXPLORE',
-  CONTRIBUTE = 'CONTRIBUTE',
-  ABOUT = 'ABOUT',
-  GUIDEBOOK = 'GUIDEBOOK',
-  MAP = 'MAP'
+  EXPLORE = "EXPLORE",
+  CONTRIBUTE = "CONTRIBUTE",
+  ABOUT = "ABOUT",
+  GUIDEBOOK = "GUIDEBOOK",
+  MAP = "MAP",
+  ADMIN = "ADMIN",
 }
 
 export interface LetteringUploadRequest {
@@ -49,7 +50,7 @@ export interface LetteringResponse {
     confidence?: number;
     colorPalette?: string[];
   };
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: "PENDING" | "APPROVED" | "REJECTED";
   likesCount: number;
   commentsCount: number;
   createdAt: string;
