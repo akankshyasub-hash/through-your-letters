@@ -72,7 +72,6 @@ async fn main() -> anyhow::Result<()> {
     if config.enable_ml_processing {
         let ml_processor = MlProcessor::new(
             db_pool.clone(),
-            storage_service,
             ml_detector.clone(),
             redis_queue,
         );

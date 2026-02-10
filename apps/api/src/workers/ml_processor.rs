@@ -8,7 +8,6 @@ use std::{sync::Arc, time::Duration};
 
 pub struct MlProcessor {
     db: PgPool,
-    storage: Arc<R2StorageService>,
     detector: Arc<OnnxTextDetector>,
     queue: Arc<RedisQueue>,
 }
@@ -16,7 +15,6 @@ pub struct MlProcessor {
 impl MlProcessor {
     pub fn new(
         db: PgPool,
-        storage: Arc<R2StorageService>,
         detector: Arc<OnnxTextDetector>,
         queue: Arc<RedisQueue>,
     ) -> Self {

@@ -51,7 +51,3 @@ pub fn create_router(state: AppState) -> Router {
         .merge(admin_routes)
         .with_state(state)
 }
-
-async fn health_check() -> &'static str {
-    "OK"
-}
