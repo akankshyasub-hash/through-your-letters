@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, image_url, thumbnail_small, contributor_tag, pin_code,\n               detected_text, status, likes_count, comments_count, created_at\n               FROM letterings\n               WHERE status = $1\n               ORDER BY created_at ASC\n               LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "thumbnail_small",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "contributor_tag",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "pin_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "detected_text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "likes_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "comments_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "022ad60fbe82ae7b4d7194b84d850a527c6514ed6cc2246c9439c18d23635aaa"
+}

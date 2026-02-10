@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO likes (id, lettering_id, user_ip) \n            VALUES ($1, $2, $3) \n            ON CONFLICT (lettering_id, user_ip) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Inet"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fdd978b2695263192d24a9817f4889dcc3c3f309dd8cac3a2c3d05a7cf9b7843"
+}

@@ -18,7 +18,7 @@ Get from: Render Dashboard → Service → Settings → Deploy Hook
 VERCEL_TOKEN=xxx
 VERCEL_ORG_ID=team_xxx
 VERCEL_PROJECT_ID=prj_xxx
-VITE_API_URL=https://your-api.onrender.com
+VITE_API_URL=https://through-your-letters-api.onrender.com
 ```
 
 Get from:
@@ -56,7 +56,7 @@ CORS_ALLOWED_ORIGINS=https://your-app.vercel.app
 Set in: Project → Settings → Environment Variables
 
 ```bash
-VITE_API_URL=https://your-api.onrender.com
+VITE_API_URL=https://through-your-letters-api.onrender.com
 ```
 
 ## Free Service URLs

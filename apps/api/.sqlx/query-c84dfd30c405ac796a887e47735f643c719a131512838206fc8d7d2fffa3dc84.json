@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, city_id, contributor_tag, image_url,\n            thumbnail_small, thumbnail_medium, thumbnail_large,\n            ST_AsText(location) as location_wkt,\n            pin_code, status, uploaded_by_ip, created_at, updated_at,\n            likes_count, comments_count, detected_text, description, image_hash\n            FROM letterings WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "city_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "contributor_tag",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "thumbnail_small",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "thumbnail_medium",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "thumbnail_large",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "location_wkt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "pin_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "uploaded_by_ip",
+        "type_info": "Inet"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "likes_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 14,
+        "name": "comments_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 15,
+        "name": "detected_text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "image_hash",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c84dfd30c405ac796a887e47735f643c719a131512838206fc8d7d2fffa3dc84"
+}

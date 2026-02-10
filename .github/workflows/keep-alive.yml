@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Ping backend health endpoint
         run: |
-          curl -f https://your-api.onrender.com/health || echo "Backend is sleeping"
+          curl -f https://through-your-letters-api.onrender.com || echo "Backend is sleeping"
         continue-on-error: true
 
 # Replace 'your-api' with your actual Render service name
