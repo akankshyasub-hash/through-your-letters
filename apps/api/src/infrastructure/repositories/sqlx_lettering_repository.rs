@@ -11,7 +11,7 @@ impl SqlxLetteringRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    
+
     // Helper to map DB row to Lettering struct
     #[allow(clippy::too_many_arguments)]
     fn map_row_to_lettering(
@@ -32,8 +32,15 @@ impl SqlxLetteringRepository {
         likes: i32,
         comments: i32,
         detected_text: Option<String>,
-        description: Option<String>, // Added
+        description: Option<String>,
         image_hash: Option<String>,
+        report_count: i32,
+        report_reasons: serde_json::Value,
+        cultural_context: Option<String>,
+        ml_style: Option<String>,
+        ml_script: Option<String>,
+        ml_confidence: Option<f32>,
+        ml_color_palette: Option<serde_json::Value>,
     ) -> Lettering {
         let coords = location_wkt
             .and_then(|wkt| {
@@ -60,18 +67,32 @@ impl SqlxLetteringRepository {
             },
             pin_code,
             detected_text,
-            ml_metadata: None,
-            description, // Mapped
+            ml_metadata: if ml_style.is_some() || ml_script.is_some() || ml_color_palette.is_some()
+            {
+                Some(ImageMetadata {
+                    style: ml_style,
+                    script: ml_script,
+                    confidence: ml_confidence,
+                    color_palette: ml_color_palette.and_then(|v| serde_json::from_value(v).ok()),
+                })
+            } else {
+                None
+            },
+            description,
             is_lettering: true,
             status: match status.as_str() {
                 "APPROVED" => LetteringStatus::Approved,
                 "REJECTED" => LetteringStatus::Rejected,
+                "REPORTED" => LetteringStatus::Reported,
                 _ => LetteringStatus::Pending,
             },
             likes_count: likes,
             comments_count: comments,
             uploaded_by_ip,
             image_hash,
+            report_count,
+            report_reasons: serde_json::from_value(report_reasons).unwrap_or_default(),
+            cultural_context,
             created_at,
             updated_at,
         }
@@ -85,12 +106,16 @@ impl LetteringRepository for SqlxLetteringRepository {
             "POINT({} {})",
             lettering.location.coordinates[0], lettering.location.coordinates[1]
         );
+        let report_reasons_json =
+            serde_json::to_value(&lettering.report_reasons).unwrap_or(serde_json::json!([]));
 
         sqlx::query!(
             r#"INSERT INTO letterings
             (id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large,
-             location, pin_code, status, uploaded_by_ip, image_hash, description, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, ST_GeogFromText($8), $9, $10, $11, $12, $13, $14, $15)"#,
+             location, pin_code, status, uploaded_by_ip, image_hash, description,
+             report_count, report_reasons, cultural_context, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, ST_GeogFromText($8), $9, $10, $11, $12, $13,
+                    $14, $15, $16, $17, $18)"#,
             lettering.id,
             lettering.city_id,
             lettering.contributor_tag,
@@ -104,6 +129,9 @@ impl LetteringRepository for SqlxLetteringRepository {
             lettering.uploaded_by_ip,
             lettering.image_hash,
             lettering.description,
+            lettering.report_count,
+            report_reasons_json,
+            lettering.cultural_context,
             lettering.created_at,
             lettering.updated_at,
         )
@@ -120,8 +148,11 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, description, image_hash
+            likes_count, comments_count, detected_text, description, image_hash,
+            report_count, report_reasons, cultural_context,
+            ml_style, ml_script, ml_confidence, ml_color_palette
             FROM letterings
+            WHERE status NOT IN ('REPORTED', 'REJECTED')
             ORDER BY created_at DESC
             LIMIT $1 OFFSET $2"#,
             limit,
@@ -152,6 +183,13 @@ impl LetteringRepository for SqlxLetteringRepository {
                 row.detected_text,
                 row.description,
                 row.image_hash,
+                row.report_count,
+                row.report_reasons,
+                row.cultural_context,
+                row.ml_style,
+                row.ml_script,
+                row.ml_confidence,
+                row.ml_color_palette,
             ));
         }
 
@@ -164,7 +202,9 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, description, image_hash
+            likes_count, comments_count, detected_text, description, image_hash,
+            report_count, report_reasons, cultural_context,
+            ml_style, ml_script, ml_confidence, ml_color_palette
             FROM letterings WHERE id = $1"#,
             id
         )
@@ -192,6 +232,13 @@ impl LetteringRepository for SqlxLetteringRepository {
                 r.detected_text,
                 r.description,
                 r.image_hash,
+                r.report_count,
+                r.report_reasons,
+                r.cultural_context,
+                r.ml_style,
+                r.ml_script,
+                r.ml_confidence,
+                r.ml_color_palette,
             )
         }))
     }
@@ -225,7 +272,9 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, description, image_hash
+            likes_count, comments_count, detected_text, description, image_hash,
+            report_count, report_reasons, cultural_context,
+            ml_style, ml_script, ml_confidence, ml_color_palette
             FROM letterings
             WHERE detected_text_tsv @@ to_tsquery('english', $1)
                OR contributor_tag ILIKE $2
@@ -262,6 +311,13 @@ impl LetteringRepository for SqlxLetteringRepository {
                 row.detected_text,
                 row.description,
                 row.image_hash,
+                row.report_count,
+                row.report_reasons,
+                row.cultural_context,
+                row.ml_style,
+                row.ml_script,
+                row.ml_confidence,
+                row.ml_color_palette,
             ));
         }
 
@@ -286,7 +342,9 @@ impl LetteringRepository for SqlxLetteringRepository {
             thumbnail_small, thumbnail_medium, thumbnail_large,
             ST_AsText(location) as location_wkt,
             pin_code, status, uploaded_by_ip, created_at, updated_at,
-            likes_count, comments_count, detected_text, description, image_hash
+            likes_count, comments_count, detected_text, description, image_hash,
+            report_count, report_reasons, cultural_context,
+            ml_style, ml_script, ml_confidence, ml_color_palette
             FROM letterings WHERE image_hash = $1"#,
             hash
         )
@@ -314,6 +372,13 @@ impl LetteringRepository for SqlxLetteringRepository {
                 r.detected_text,
                 r.description,
                 r.image_hash,
+                r.report_count,
+                r.report_reasons,
+                r.cultural_context,
+                r.ml_style,
+                r.ml_script,
+                r.ml_confidence,
+                r.ml_color_palette,
             )
         }))
     }

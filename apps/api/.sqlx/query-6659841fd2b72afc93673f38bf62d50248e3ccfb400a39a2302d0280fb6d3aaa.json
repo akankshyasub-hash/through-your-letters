@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, city_id, contributor_tag, image_url,\n            thumbnail_small, thumbnail_medium, thumbnail_large,\n            ST_AsText(location) as location_wkt,\n            pin_code, status, uploaded_by_ip, created_at, updated_at,\n            likes_count, comments_count, detected_text, description, image_hash\n            FROM letterings WHERE id = $1",
+  "query": "SELECT id, city_id, contributor_tag, image_url,\n            thumbnail_small, thumbnail_medium, thumbnail_large,\n            ST_AsText(location) as location_wkt,\n            pin_code, status, uploaded_by_ip, created_at, updated_at,\n            likes_count, comments_count, detected_text, description, image_hash,\n            report_count, report_reasons, cultural_context,\n            ml_style, ml_script, ml_confidence, ml_color_palette\n            FROM letterings\n            WHERE status NOT IN ('REPORTED', 'REJECTED')\n            ORDER BY created_at DESC\n            LIMIT $1 OFFSET $2",
   "describe": {
     "columns": [
       {
@@ -92,11 +92,47 @@
         "ordinal": 17,
         "name": "image_hash",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "report_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 19,
+        "name": "report_reasons",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 20,
+        "name": "cultural_context",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "ml_style",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 22,
+        "name": "ml_script",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 23,
+        "name": "ml_confidence",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 24,
+        "name": "ml_color_palette",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -117,8 +153,15 @@
       false,
       true,
       true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "c84dfd30c405ac796a887e47735f643c719a131512838206fc8d7d2fffa3dc84"
+  "hash": "6659841fd2b72afc93673f38bf62d50248e3ccfb400a39a2302d0280fb6d3aaa"
 }

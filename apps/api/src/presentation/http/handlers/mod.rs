@@ -1,8 +1,9 @@
-pub mod upload;
+pub mod admin;
+pub mod analytics;
+pub mod cities;
 pub mod gallery;
+pub mod health;
+pub mod letterings;
 pub mod search;
 pub mod social;
-pub mod letterings;
-pub mod cities;
-pub mod admin;
-pub mod health;
+pub mod upload;

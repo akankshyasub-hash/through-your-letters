@@ -107,7 +107,9 @@ const App: React.FC = () => {
         title: item.detected_text || "Street Discovery",
         location: item.pin_code,
         culturalContext:
-          item.description || "Archived street typography from the city.",
+          item.cultural_context ||
+          item.description ||
+          "Archived street typography from the city.",
         historicalNote: `Status: ${item.status}. Archived: ${new Date(item.created_at).toLocaleDateString()}`,
         image: item.image_url,
         thumbnail: item.thumbnail_urls.small,

@@ -46,10 +46,16 @@ export interface Lettering {
     style?: string;
     script?: string;
   };
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  cultural_context?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "REPORTED";
   created_at: string;
   likes_count?: number;
   comments_count?: number;
   report_count?: number;
   report_reasons?: string[];
+}
+
+export interface NeighborhoodCount {
+  pin_code: string;
+  count: number;
 }

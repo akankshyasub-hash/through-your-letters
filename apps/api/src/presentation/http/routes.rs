@@ -1,5 +1,5 @@
 use super::{
-    handlers::{admin, cities, gallery, letterings, search, social, upload, health},
+    handlers::{admin, analytics, cities, gallery, health, letterings, search, social, upload},
     middleware::admin::require_admin,
     state::AppState,
 };
@@ -23,6 +23,10 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/admin/letterings/{id}",
             delete(admin::delete_any_lettering),
         )
+        .route(
+            "/api/v1/admin/letterings/{id}/clear-reports",
+            post(admin::clear_reports),
+        )
         .route("/api/v1/admin/stats", get(admin::get_stats))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
@@ -36,6 +40,15 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/v1/letterings/{id}",
             delete(letterings::delete_lettering),
+        )
+        .route(
+            "/api/v1/letterings/{id}/report",
+            post(letterings::report_lettering),
+        )
+        // Analytics
+        .route(
+            "/api/v1/analytics/neighborhoods",
+            get(analytics::get_neighborhoods),
         )
         // Social
         .route("/api/v1/letterings/{id}/like", post(social::like_lettering))

@@ -24,6 +24,7 @@ pub struct Config {
     pub admin_email: String,
     pub admin_password_hash: String,
     pub jwt_secret: String,
+    pub huggingface_token: Option<String>,
 }
 
 impl Config {
@@ -70,6 +71,7 @@ impl Config {
             }),
             jwt_secret: std::env::var("JWT_SECRET")
                 .unwrap_or_else(|_| "ttl-dev-jwt-secret-change-in-production".into()),
+            huggingface_token: std::env::var("HUGGINGFACE_TOKEN").ok(),
         })
     }
 }

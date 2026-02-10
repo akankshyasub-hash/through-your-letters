@@ -24,6 +24,9 @@ pub struct Lettering {
     #[ts(skip)]
     pub uploaded_by_ip: Option<IpNetwork>,
     pub image_hash: Option<String>,
+    pub report_count: i32,
+    pub report_reasons: Vec<String>,
+    pub cultural_context: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -59,4 +62,5 @@ pub enum LetteringStatus {
     Pending,
     Approved,
     Rejected,
+    Reported,
 }

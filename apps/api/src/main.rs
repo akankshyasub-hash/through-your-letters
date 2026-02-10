@@ -74,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
             db_pool.clone(),
             ml_detector.clone(),
             redis_queue,
+            config.huggingface_token.clone(),
         );
         tokio::spawn(async move {
             ml_processor.start().await;

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, image_url, thumbnail_small, contributor_tag, pin_code,\n               detected_text, status, likes_count, comments_count, created_at\n               FROM letterings\n               ORDER BY created_at DESC\n               LIMIT $1 OFFSET $2",
+  "query": "SELECT id, image_url, thumbnail_small, contributor_tag, pin_code,\n               detected_text, description, status, likes_count, comments_count,\n               report_count, report_reasons, cultural_context, created_at\n               FROM letterings\n               WHERE status = $1\n               ORDER BY created_at ASC\n               LIMIT $2 OFFSET $3",
   "describe": {
     "columns": [
       {
@@ -35,27 +35,48 @@
       },
       {
         "ordinal": 6,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
         "name": "status",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "likes_count",
         "type_info": "Int4"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "comments_count",
         "type_info": "Int4"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
+        "name": "report_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "report_reasons",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 12,
+        "name": "cultural_context",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
         "name": "created_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Int8",
         "Int8"
       ]
@@ -67,11 +88,15 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
+      false,
+      false,
+      true,
       false
     ]
   },
-  "hash": "235a7b4dcfc7339e4890f9766b7c814bee4315a2cb091ab957e475e534e357f3"
+  "hash": "dcd23e5c20563e90da672d7d1eb63fc466c0aad15928d31f585a75cfc71122d5"
 }

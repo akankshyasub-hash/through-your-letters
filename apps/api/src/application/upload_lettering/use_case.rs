@@ -50,11 +50,14 @@ impl UploadLetteringUseCase {
         }
 
         let lettering_id = Uuid::now_v7();
-        let image_key = format!("letterings/{}.jpg", lettering_id);
+
+        // Convert original to WebP (max 1200px) for storage conservation
+        let original_webp = Self::convert_to_webp(&request.image_data, 1200)?;
+        let image_key = format!("letterings/{}.webp", lettering_id);
 
         let image_url = self
             .storage
-            .upload(&image_key, request.image_data.to_vec(), "image/jpeg")
+            .upload(&image_key, original_webp, "image/webp")
             .await
             .map_err(|e| format!("Storage error: {}", e))?;
 
@@ -85,6 +88,9 @@ impl UploadLetteringUseCase {
             comments_count: 0,
             uploaded_by_ip: request.uploaded_by_ip,
             image_hash: Some(image_hash),
+            report_count: 0,
+            report_reasons: vec![],
+            cultural_context: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
@@ -106,32 +112,47 @@ impl UploadLetteringUseCase {
         Ok(saved)
     }
 
-    async fn generate_thumbnails(
-        &self,
-        image_data: &Bytes,
-        id: &Uuid,
-    ) -> Result<ThumbnailUrls, String> {
+    fn convert_to_webp(image_data: &[u8], max_width: u32) -> Result<Vec<u8>, String> {
         use image::ImageFormat;
         use std::io::Cursor;
 
         let img =
             image::load_from_memory(image_data).map_err(|e| format!("Invalid image: {}", e))?;
+        let resized = if img.width() > max_width {
+            img.resize(max_width, max_width, image::imageops::FilterType::Lanczos3)
+        } else {
+            img
+        };
+        let mut buffer = Cursor::new(Vec::new());
+        resized
+            .write_to(&mut buffer, ImageFormat::WebP)
+            .map_err(|e| format!("WebP conversion failed: {}", e))?;
+        Ok(buffer.into_inner())
+    }
 
-        let sizes = [("small", 200), ("medium", 400), ("large", 800)];
+    async fn generate_thumbnails(
+        &self,
+        image_data: &Bytes,
+        id: &Uuid,
+    ) -> Result<ThumbnailUrls, String> {
+        // PRD sizes: small=200px (heatmap/matrix), medium=600px (gallery), large=1200px (zine view)
+        let sizes = [("small", 200u32), ("medium", 600), ("large", 1200)];
+        let img =
+            image::load_from_memory(image_data).map_err(|e| format!("Invalid image: {}", e))?;
 
         let mut urls = vec![];
 
         for (size_name, width) in sizes {
             let resized = img.resize(width, width, image::imageops::FilterType::Lanczos3);
-            let mut buffer = Cursor::new(Vec::new());
+            let mut buffer = std::io::Cursor::new(Vec::new());
             resized
-                .write_to(&mut buffer, ImageFormat::Jpeg)
+                .write_to(&mut buffer, image::ImageFormat::WebP)
                 .map_err(|e| format!("Thumbnail generation failed: {}", e))?;
 
-            let key = format!("thumbnails/{}/{}.jpg", size_name, id);
+            let key = format!("thumbnails/{}/{}.webp", size_name, id);
             let url = self
                 .storage
-                .upload(&key, buffer.into_inner(), "image/jpeg")
+                .upload(&key, buffer.into_inner(), "image/webp")
                 .await
                 .map_err(|e| format!("Thumbnail upload failed: {}", e))?;
 

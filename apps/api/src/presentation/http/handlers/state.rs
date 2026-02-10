@@ -1,17 +1,17 @@
-use sqlx::PgPool;
-use std::sync::Arc;
 use crate::{
     config::Config,
     infrastructure::{
-        storage::traits::StorageService,
-        ml::::MlService,
+        ml::traits::MlService,
         queue::redis_queue::RedisQueue,
         repositories::{
             sqlx_lettering_repository::SqlxLetteringRepository,
             sqlx_social_repository::SqlxSocialRepository,
         },
+        storage::traits::StorageService,
     },
 };
+use sqlx::PgPool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {

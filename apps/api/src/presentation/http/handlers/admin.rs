@@ -52,9 +52,13 @@ pub struct ModerationItem {
     pub contributor_tag: String,
     pub pin_code: String,
     pub detected_text: Option<String>,
+    pub description: Option<String>,
     pub status: String,
     pub likes_count: i32,
     pub comments_count: i32,
+    pub report_count: i32,
+    pub report_reasons: serde_json::Value,
+    pub cultural_context: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -128,7 +132,8 @@ pub async fn get_moderation_queue(
         let items = sqlx::query_as!(
             ModerationItem,
             r#"SELECT id, image_url, thumbnail_small, contributor_tag, pin_code,
-               detected_text, status, likes_count, comments_count, created_at
+               detected_text, description, status, likes_count, comments_count,
+               report_count, report_reasons, cultural_context, created_at
                FROM letterings
                ORDER BY created_at DESC
                LIMIT $1 OFFSET $2"#,
@@ -150,7 +155,8 @@ pub async fn get_moderation_queue(
         let items = sqlx::query_as!(
             ModerationItem,
             r#"SELECT id, image_url, thumbnail_small, contributor_tag, pin_code,
-               detected_text, status, likes_count, comments_count, created_at
+               detected_text, description, status, likes_count, comments_count,
+               report_count, report_reasons, cultural_context, created_at
                FROM letterings
                WHERE status = $1
                ORDER BY created_at ASC
@@ -264,6 +270,32 @@ pub async fn delete_any_lettering(
 
     tracing::info!(lettering_id = %id, "Lettering deleted by admin");
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// "Keep & Clear": Resets report_count to 0, clears reasons, restores status to APPROVED
+pub async fn clear_reports(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let result = sqlx::query!(
+        r#"UPDATE letterings
+        SET report_count = 0,
+            report_reasons = '[]'::jsonb,
+            status = 'APPROVED',
+            updated_at = NOW()
+        WHERE id = $1"#,
+        id
+    )
+    .execute(&state.db)
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Lettering not found".to_string()));
+    }
+
+    tracing::info!(lettering_id = %id, "Reports cleared by admin");
+    Ok(StatusCode::OK)
 }
 
 pub async fn get_stats(State(state): State<AppState>) -> Result<Json<StatsResponse>, AppError> {

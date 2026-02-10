@@ -139,7 +139,7 @@ const AdminPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       let body: string | null = null;
 
       if (action === "approve") url += "/approve";
-      if (action === "keep") url += "/approve";
+      if (action === "keep") url += "/clear-reports";
       if (action === "reject") {
         url += "/reject";
         body = JSON.stringify({ reason: reason || "Administrative rejection" });
@@ -519,6 +519,17 @@ const ModerationCard = ({
           )}
         </div>
       </div>
+
+      {item.cultural_context && (
+        <div className="bg-slate-50 p-4 border-l-4 border-[#2d5a27] space-y-1">
+          <p className="text-[10px] font-black uppercase text-[#2d5a27] tracking-widest">
+            Neighborhood History (Wikipedia)
+          </p>
+          <p className="text-sm text-slate-700 leading-relaxed italic line-clamp-4">
+            {item.cultural_context}
+          </p>
+        </div>
+      )}
 
       {isReported && item.report_reasons && (
         <div className="bg-red-50/50 p-4 border-l-4 border-red-600 space-y-1">
