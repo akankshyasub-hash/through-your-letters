@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- Cities table
-CREATE TABLE cities (
+CREATE TABLE IF NOT EXISTS cities (
     id UUID PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     country_code VARCHAR(2) NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE cities (
 );
 
 -- Letterings table
-CREATE TABLE letterings (
+CREATE TABLE IF NOT EXISTS letterings (
     id UUID PRIMARY KEY,
     city_id UUID NOT NULL REFERENCES cities(id),
     contributor_tag VARCHAR(30) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE letterings (
 );
 
 -- Likes table
-CREATE TABLE likes (
+CREATE TABLE IF NOT EXISTS likes (
     id UUID PRIMARY KEY,
     lettering_id UUID NOT NULL REFERENCES letterings(id) ON DELETE CASCADE,
     user_ip INET NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE likes (
 );
 
 -- Comments table
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
     id UUID PRIMARY KEY,
     lettering_id UUID NOT NULL REFERENCES letterings(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
@@ -54,14 +54,15 @@ CREATE TABLE comments (
 );
 
 -- Indexes
-CREATE INDEX idx_letterings_city ON letterings(city_id);
-CREATE INDEX idx_letterings_status ON letterings(status);
-CREATE INDEX idx_letterings_contributor ON letterings(contributor_tag);
-CREATE INDEX idx_letterings_location ON letterings USING GIST(location);
-CREATE INDEX idx_letterings_created ON letterings(created_at DESC);
-CREATE INDEX idx_likes_lettering ON likes(lettering_id);
-CREATE INDEX idx_comments_lettering ON comments(lettering_id);
+CREATE INDEX IF NOT EXISTS idx_letterings_city ON letterings(city_id);
+CREATE INDEX IF NOT EXISTS idx_letterings_status ON letterings(status);
+CREATE INDEX IF NOT EXISTS idx_letterings_contributor ON letterings(contributor_tag);
+CREATE INDEX IF NOT EXISTS idx_letterings_location ON letterings USING GIST(location);
+CREATE INDEX IF NOT EXISTS idx_letterings_created ON letterings(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_likes_lettering ON likes(lettering_id);
+CREATE INDEX IF NOT EXISTS idx_comments_lettering ON comments(lettering_id);
 
--- Insert Bengaluru
+-- Insert Bengaluru (Use ON CONFLICT to avoid duplicate key errors)
 INSERT INTO cities (id, name, country_code) 
-VALUES ('0194f123-4567-7abc-8def-0123456789ab', 'Bengaluru', 'IN');
+VALUES ('0194f123-4567-7abc-8def-0123456789ab', 'Bengaluru', 'IN')
+ON CONFLICT (id) DO NOTHING;
