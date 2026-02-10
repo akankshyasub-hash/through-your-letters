@@ -109,7 +109,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         Ok(lettering.clone())
     }
@@ -129,7 +129,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -170,7 +170,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         Ok(row.map(|r| {
             self.map_row_to_lettering(
@@ -204,7 +204,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         let result = sqlx::query!("DELETE FROM letterings WHERE id = $1", id)
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+            .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(DomainError::NotFound("Lettering not found".to_string()));
@@ -239,7 +239,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -275,7 +275,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         Ok(count.unwrap_or(0))
     }
@@ -292,7 +292,7 @@ impl LetteringRepository for SqlxLetteringRepository {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
 
         Ok(row.map(|r| {
             self.map_row_to_lettering(

@@ -5,3 +5,4 @@ pub mod social;
 pub mod letterings;
 pub mod cities;
 pub mod admin;
+pub mod health;

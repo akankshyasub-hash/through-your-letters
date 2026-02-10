@@ -50,14 +50,14 @@ const ZinePage: React.FC<ZinePageProps> = ({ page, onDelete }) => {
 
           <div className="space-y-4">
             {page.description && (
-              <div className="bg-slate-50 p-4 border-l-4 border-black">
+              <div className="bg-slate-50 p-4 border-l-4 border-black w-full">
                 <div className="flex items-center gap-2 mb-2 text-slate-500">
                   <AlignLeft size={14} />
                   <h4 className="text-xs font-black uppercase tracking-widest">
                     Curator's Note
                   </h4>
                 </div>
-                <p className="text-base leading-relaxed text-slate-800 font-medium">
+                <p className="text-base leading-relaxed text-slate-800 font-medium break-words whitespace-pre-wrap">
                   {page.description}
                 </p>
               </div>

@@ -91,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("✅ API Server listening on {}", addr);
+    tracing::info!("API Server listening on {}", addr);
 
     axum::serve(listener, app).await?;
     Ok(())

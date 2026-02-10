@@ -32,12 +32,12 @@ impl SocialRepository for SqlxSocialRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
-        
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
+                
         sqlx::query!("UPDATE letterings SET likes_count = likes_count + 1 WHERE id = $1", lettering_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+            .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
         
         Ok(Like {
             id: like_id,
@@ -54,12 +54,12 @@ impl SocialRepository for SqlxSocialRepository {
         sqlx::query!("DELETE FROM likes WHERE lettering_id = $1 AND user_ip = $2", lettering_id, ip_network)
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+            .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
         
         sqlx::query!("UPDATE letterings SET likes_count = GREATEST(0, likes_count - 1) WHERE id = $1", lettering_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+            .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
         
         Ok(())
     }
@@ -80,12 +80,12 @@ impl SocialRepository for SqlxSocialRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
         
         sqlx::query!("UPDATE letterings SET comments_count = comments_count + 1 WHERE id = $1", lettering_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+            .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
         
         Ok(Comment {
             id: comment_id,
@@ -105,7 +105,7 @@ impl SocialRepository for SqlxSocialRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e: sqlx::Error| DomainError::InfrastructureError(e.to_string()))?;
         
         Ok(comments)
     }

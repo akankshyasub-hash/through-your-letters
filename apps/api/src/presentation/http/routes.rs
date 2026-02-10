@@ -1,5 +1,5 @@
 use super::{
-    handlers::{admin, cities, gallery, letterings, search, social, upload},
+    handlers::{admin, cities, gallery, letterings, search, social, upload, health},
     middleware::admin::require_admin,
     state::AppState,
 };
@@ -28,7 +28,7 @@ pub fn create_router(state: AppState) -> Router {
 
     Router::new()
         // Health
-        .route("/health", get(health_check))
+        .route("/health", get(health::health_check))
         // Letterings CRUD
         .route("/api/v1/letterings", get(gallery::get_letterings))
         .route("/api/v1/letterings/upload", post(upload::upload_lettering))

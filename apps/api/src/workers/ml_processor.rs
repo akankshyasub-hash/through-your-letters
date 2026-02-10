@@ -81,7 +81,7 @@ impl MlProcessor {
 
                     match update_result {
                         Ok(_) => tracing::info!(
-                            "✅ Successfully processed lettering {}",
+                            "Successfully processed lettering {}",
                             job.lettering_id
                         ),
                         Err(e) => tracing::error!(
