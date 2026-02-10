@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libpq-dev \
+    g++ \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -15,8 +17,10 @@ COPY .sqlx ./.sqlx
 COPY src ./src
 COPY migrations ./migrations
 
+# Enable offline mode
 ENV SQLX_OFFLINE=true
 
+# Build the release binary
 RUN cargo build --release
 
 FROM debian:bookworm-slim
@@ -29,10 +33,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Copy binary and migrations from builder
 COPY --from=builder /app/target/release/api /usr/local/bin/api
 COPY --from=builder /app/migrations ./migrations
 
-# Standard Render configuration
+# Render standard envs
 ENV RUST_LOG=info
 ENV HOST=0.0.0.0
 ENV PORT=3000
