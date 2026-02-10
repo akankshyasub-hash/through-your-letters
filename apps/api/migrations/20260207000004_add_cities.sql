@@ -7,5 +7,4 @@ INSERT INTO cities (id, name, country_code) VALUES
 ('0194f123-4567-7abc-8def-0123456789b1', 'Pune', 'IN')
 ON CONFLICT (id) DO NOTHING;
 
--- Add city selection endpoint
-CREATE INDEX idx_cities_name ON cities(name);
+CREATE INDEX IF NOT EXISTS idx_cities_name ON cities(name);

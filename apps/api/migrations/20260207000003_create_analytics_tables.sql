@@ -1,4 +1,4 @@
-CREATE TABLE daily_stats (
+CREATE TABLE IF NOT EXISTS daily_stats (
     id UUID PRIMARY KEY,
     date DATE NOT NULL,
     uploads_count INTEGER NOT NULL DEFAULT 0,
@@ -8,4 +8,4 @@ CREATE TABLE daily_stats (
     UNIQUE(date)
 );
 
-CREATE INDEX idx_daily_stats_date ON daily_stats(date DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_stats(date DESC);

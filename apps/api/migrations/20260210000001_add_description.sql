@@ -1,1 +1,1 @@
-ALTER TABLE letterings ADD COLUMN description TEXT; 
+ALTER TABLE letterings ADD COLUMN IF NOT EXISTS description TEXT;
