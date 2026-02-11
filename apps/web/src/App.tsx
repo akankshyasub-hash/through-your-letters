@@ -6,6 +6,7 @@ import ZinePage from "./components/ZinePage";
 import ContributionPanel from "./components/ContributionPanel";
 import MapSection from "./components/MapSection";
 import AdminPanel from "./components/AdminPanel";
+import SearchBar from "./components/SearchBar";
 import ToastContainer from "./components/ui/ToastContainer";
 import { useToastStore } from "./store/useToastStore";
 import {
@@ -92,8 +93,33 @@ const App: React.FC = () => {
   });
 
   const [letterings, setLetterings] = useState<ZinePageData[]>([]);
+  const [searchResults, setSearchResults] = useState<ZinePageData[] | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const { addToast } = useToastStore();
+
+  const mapLetteringToZinePage = (item: Lettering): ZinePageData => ({
+    id: item.id,
+    title: item.detected_text || "Street Discovery",
+    location: item.pin_code,
+    culturalContext:
+      item.cultural_context ||
+      item.description ||
+      "Archived street typography from the city.",
+    historicalNote: `Status: ${item.status}. Archived: ${new Date(item.created_at).toLocaleDateString()}`,
+    image: item.image_url,
+    thumbnail: item.thumbnail_urls.small,
+    imageSource: "",
+    sourceUrl: "",
+    vibe: item.ml_metadata?.style || "Handcrafted",
+    readMoreUrl: "",
+    isUserContribution: true,
+    contributorName: item.contributor_tag,
+    description: item.description,
+    likes_count: item.likes_count || 0,
+    comments_count: item.comments_count || 0,
+  });
 
   const fetchLetterings = async () => {
     try {
@@ -102,22 +128,7 @@ const App: React.FC = () => {
         `${API_BASE_URL}/api/v1/letterings?limit=50&offset=0`,
       );
       const data = await res.json();
-      const formatted = data.letterings.map((item: Lettering) => ({
-        id: item.id,
-        title: item.detected_text || "Street Discovery",
-        location: item.pin_code,
-        culturalContext:
-          item.cultural_context ||
-          item.description ||
-          "Archived street typography from the city.",
-        historicalNote: `Status: ${item.status}. Archived: ${new Date(item.created_at).toLocaleDateString()}`,
-        image: item.image_url,
-        thumbnail: item.thumbnail_urls.small,
-        vibe: item.ml_metadata?.style || "Handcrafted",
-        isUserContribution: true,
-        contributorName: item.contributor_tag,
-        description: item.description,
-      }));
+      const formatted = data.letterings.map(mapLetteringToZinePage);
       setLetterings(formatted);
     } catch (e) {
       addToast("Archive connection failed", "error");
@@ -161,7 +172,7 @@ const App: React.FC = () => {
             <section className="space-y-12">
               <div className="flex justify-between items-end border-b-4 border-black pb-8">
                 <h2 className="text-4xl md:text-6xl font-black uppercase tracking-tighter">
-                  The Gallery
+                  {searchResults ? "Search Results" : "The Gallery"}
                 </h2>
                 <button
                   onClick={() => setMode(AppMode.CONTRIBUTE)}
@@ -170,27 +181,38 @@ const App: React.FC = () => {
                   Add Discovery
                 </button>
               </div>
-              {loading ? (
+              <SearchBar
+                onResults={(results) =>
+                  setSearchResults(results.map(mapLetteringToZinePage))
+                }
+                onClear={() => setSearchResults(null)}
+              />
+              {loading && !searchResults ? (
                 <Loader2 className="animate-spin mx-auto text-[#cc543a]" />
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {letterings.slice(0, 10).map((page, idx) => (
-                    <div
-                      key={page.id}
-                      className={`group bg-white border-2 border-black p-3 brutalist-shadow-sm hover:-translate-y-1 transition-all ${idx % 3 === 0 ? "md:col-span-2" : ""}`}
-                    >
-                      <a href={`#page-${page.id}`} className="block space-y-4">
-                        <img
-                          src={page.thumbnail || page.image}
-                          className="aspect-square w-full object-cover border border-black grayscale group-hover:grayscale-0"
-                          alt={page.title}
-                        />
-                        <p className="text-[11px] font-black uppercase truncate text-black">
-                          {page.title}
-                        </p>
-                      </a>
-                    </div>
-                  ))}
+                  {(searchResults || letterings)
+                    .slice(0, 10)
+                    .map((page, idx) => (
+                      <div
+                        key={page.id}
+                        className={`group bg-white border-2 border-black p-3 brutalist-shadow-sm hover:-translate-y-1 transition-all ${idx % 3 === 0 ? "md:col-span-2" : ""}`}
+                      >
+                        <a
+                          href={`#page-${page.id}`}
+                          className="block space-y-4"
+                        >
+                          <img
+                            src={page.thumbnail || page.image}
+                            className="aspect-square w-full object-cover border border-black grayscale group-hover:grayscale-0"
+                            alt={page.title}
+                          />
+                          <p className="text-[11px] font-black uppercase truncate text-black">
+                            {page.title}
+                          </p>
+                        </a>
+                      </div>
+                    ))}
                 </div>
               )}
             </section>
@@ -219,7 +241,7 @@ const App: React.FC = () => {
             </section>
 
             <div id="archive-root" className="space-y-32">
-              {letterings.map((page) => (
+              {(searchResults || letterings).map((page) => (
                 <ZinePage key={page.id} page={page} onDelete={handleDelete} />
               ))}
             </div>
@@ -237,42 +259,47 @@ const App: React.FC = () => {
         )}
         {mode === AppMode.MAP && <MapSection />}
         {mode === AppMode.ABOUT && (
-          <div className="max-w-4xl mx-auto py-20 space-y-32">
-            <h2 className="text-7xl md:text-9xl font-black uppercase italic leading-[0.7]">
-              A Personal <span className="text-[#cc543a]">Note.</span>
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-20">
-              <div className="space-y-8">
-                <p className="handwritten text-2xl leading-relaxed font-bold border-l-4 border-black pl-8">
-                  This project started as a personal curiosity for street
-                  lettering. When I was a child, I spent my time reading
-                  magazines and books that my father collected passionately...
-                </p>
-                <p className="serif text-xl italic text-slate-700">
-                  My mother used to show me those same charts to get me to eat
-                  my food, so I believe that's where my fascination with
-                  letterforms truly began.
-                </p>
-              </div>
-              <div className="bg-black text-white p-14 brutalist-shadow-lg transform rotate-1">
-                <p className="text-xl font-bold mb-4 italic">
-                  I aim to build an open-source platform by the people, for the
-                  people, for street lettering archival.
-                </p>
-                <p className="text-base opacity-80">
-                  Capture yours, and thank you.
-                </p>
-              </div>
-            </div>
-            <div className="pt-32 border-t-8 border-black">
-              <h3 className="text-5xl font-black uppercase mb-12 flex items-center gap-4">
-                <Puzzle size={40} /> Letters and Bits
-              </h3>
-              <ScriptPuzzleGrid />
-            </div>
-          </div>
-        )}
-      </main>
+                  <div className="max-w-4xl mx-auto py-20 space-y-32">
+                    <h2 className="text-7xl md:text-9xl font-black uppercase italic leading-[0.7]">
+                      A Personal <span className="text-[#cc543a]">Note.</span>
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-20">
+                      <div className="space-y-8">
+                        <p className="handwritten text-2xl leading-relaxed text-slate-900 font-bold border-l-4 border-black pl-8">
+                          Hello! This project started as a personal curiosity for street lettering. When I was a child, I spent my time reading magazines, books, and charts that my father collected passionately. Every evening, when we went out for ice cream, we would look at the signboards on shops and streets. He used to tell me how to read and pronounce them, and eventually I realized how much I love the way letters are created, styled, painted and so on.
+                        </p>
+                        <p className="serif text-xl leading-relaxed text-slate-700 italic">
+                          My mother used to show me those same charts to get me to eat my food, so I believe that's where my fascination with letterforms truly began—haha, call it storytelling.
+                        </p>
+                        <p className="serif text-xl leading-relaxed text-slate-800">
+                          Throughout my time in academia, I've been collecting, reading, and even presenting projects on this niche interest. Now, I feel I finally have something to truly get started with. I've always loved capturing lettering and investigating the stories hidden behind them.
+                        </p>
+                      </div>
+        
+                      <div className="space-y-12 relative z-10">
+                        <div className="bg-black text-white p-14 brutalist-shadow-lg transform rotate-1">
+                          <p className="text-xl leading-snug font-bold mb-8 italic">
+                            There is no better place to start than Bengaluru, where I aim to build an open-source platform by the people, for the people, for street lettering archival.
+                          </p>
+                          <p className="text-base opacity-80 leading-relaxed font-medium">
+                            The intent is to create an archive, give credit, learn, share stories, and remember our histories. I am putting something I genuinely care about and have fun doing here for you.
+                          </p>
+                        </div>
+                        
+                        <p className="handwritten text-2xl leading-relaxed text-slate-900 font-bold border-l-8 border-[#cc543a] pl-8 py-6">
+                          This is my attempt to give a home to my collected letterings and, if you want, yours too. Go have fun with this! Upload your letters, describe them, or just add a fun anecdote. You can also see what others have created. And last but not least—thank you.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-32 border-t-8 border-black">
+                      <h3 className="text-5xl font-black uppercase mb-12 flex items-center gap-4">
+                        <Puzzle size={40} /> Letters and Bits
+                      </h3>
+                      <ScriptPuzzleGrid />
+                    </div>
+                  </div>
+                )}
+              </main>
 
       <nav className="sticky bottom-10 self-center w-[92%] md:w-[65%] bg-white border-4 border-black p-6 flex justify-between items-center z-50 brutalist-shadow-lg mx-auto mb-10 transition-all hover:scale-[1.01]">
         <button
