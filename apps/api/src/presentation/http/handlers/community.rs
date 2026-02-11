@@ -72,7 +72,7 @@ pub async fn list_collections(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CollectionResponse>>, AppError> {
     let rows: Vec<(Uuid, String, Option<String>, String, bool, chrono::DateTime<chrono::Utc>, Option<i64>)> = sqlx::query_as(
-        "SELECT c.id, c.name, c.description, c.creator_tag, c.is_public, c.created_at, COUNT(ci.id) FROM collections c LEFT JOIN collection_items ci ON ci.collection_id = c.id WHERE c.is_public = true GROUP BY c.id ORDER BY c.created_at DESC"
+        "SELECT c.id, c.name, c.description, c.creator_tag, c.is_public, c.created_at, COUNT(ci.lettering_id) FROM collections c LEFT JOIN collection_items ci ON ci.collection_id = c.id WHERE c.is_public = true GROUP BY c.id ORDER BY c.created_at DESC"
     )
     .fetch_all(&state.db)
     .await
@@ -138,7 +138,7 @@ pub async fn get_collection(
     .ok_or_else(|| AppError::NotFound("Collection not found".into()))?;
 
     let items: Vec<(Uuid, String, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT l.id, l.image_url, l.thumbnail_small, l.detected_text, l.contributor_tag FROM collection_items ci JOIN letterings l ON l.id = ci.lettering_id WHERE ci.collection_id = $1 ORDER BY ci.added_at DESC"
+        "SELECT l.id, l.image_url, l.thumbnail_small, l.detected_text, l.contributor_tag FROM collection_items ci JOIN letterings l ON l.id = ci.lettering_id WHERE ci.collection_id = $1 ORDER BY l.created_at DESC"
     )
     .bind(id)
     .fetch_all(&state.db)
