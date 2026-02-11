@@ -16,6 +16,7 @@ COPY .sqlx ./.sqlx
 
 COPY src ./src
 COPY migrations ./migrations
+COPY models ./models
 
 # Enable offline mode
 ENV SQLX_OFFLINE=true

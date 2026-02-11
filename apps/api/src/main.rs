@@ -35,14 +35,18 @@ async fn main() -> anyhow::Result<()> {
 
     // Run migrations
     sqlx::migrate!("./migrations").run(&db_pool).await?;
-    tracing::info!("✅ Database migrations completed");
+    tracing::info!("Database migrations completed");
 
     let ml_enabled = config.enable_ml_processing;
     let ml_model_path = &config.ml_model_path;
 
-    let ml_detector = Arc::new(
-        OnnxTextDetector::new(ml_model_path, ml_enabled).expect("Failed to initialize ML detector"),
-    );
+    let ml_detector = match OnnxTextDetector::new(ml_model_path, ml_enabled) {
+        Ok(detector) => Arc::new(detector),
+        Err(err) => {
+            tracing::error!("Failed to initialize ML detector: {}", err);
+            Arc::new(OnnxTextDetector::new(ml_model_path, false).expect("Failed to initialize ML detector"))
+        }
+    };
 
     let redis_client = redis::Client::open(config.redis_url.clone())?;
     let redis_queue = Arc::new(RedisQueue::new(redis_client.clone()));
