@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Target, Info, Globe, Loader2 } from "lucide-react";
 import { API_BASE_URL, PIN_AREA_MAP } from "../constants";
 import { NeighborhoodCount } from "../types";
+import LeafletMap from "./LeafletMap";
 
 const REGIONS = [
   { name: "Basavanagudi", pin: "560004" },
@@ -65,6 +66,9 @@ const MapSection: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Interactive Leaflet Map */}
+      <LeafletMap />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="space-y-8">

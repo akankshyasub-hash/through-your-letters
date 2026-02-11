@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT pin_code FROM letterings WHERE id = $1",
+  "query": "SELECT likes_count FROM letterings WHERE id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "pin_code",
-        "type_info": "Varchar"
+        "name": "likes_count",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "416d71be485cbeb9e03ae0825adf6ff4a282b7e5acff8ca3c763f913b9a1ee58"
+  "hash": "ee776c041e3de2d7fbf50ad00f75c9ff122838a51f9ccc4af1d0f4c5fdf5cbfd"
 }

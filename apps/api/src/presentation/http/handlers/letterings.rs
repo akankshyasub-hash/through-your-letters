@@ -1,10 +1,11 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
 };
 use serde::Deserialize;
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
@@ -12,9 +13,142 @@ use crate::{
     presentation::http::{errors::AppError, state::AppState},
 };
 
+pub async fn get_lettering(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let lettering = state
+        .lettering_repo
+        .find_by_id(id)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound("Lettering not found".to_string()))?;
+
+    Ok(Json(
+        serde_json::to_value(&lettering).map_err(|e| AppError::InternalError(e.to_string()))?,
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContributorQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_limit() -> i64 {
+    50
+}
+
+pub async fn get_contributor_letterings(
+    State(state): State<AppState>,
+    Path(tag): Path<String>,
+    Query(params): Query<ContributorQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let count = state
+        .lettering_repo
+        .count_by_contributor(&tag)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    let letterings = state
+        .lettering_repo
+        .find_by_contributor(&tag, params.limit, params.offset)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "contributor_tag": tag,
+        "total_count": count,
+        "letterings": letterings,
+    })))
+}
+
+pub async fn get_similar(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // Fetch the source lettering's metadata
+    let source: Option<(Option<String>, Option<String>, String)> =
+        sqlx::query_as("SELECT ml_style, ml_script, pin_code FROM letterings WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e: sqlx::Error| AppError::InternalError(e.to_string()))?;
+
+    let Some((ml_style, ml_script, pin_code)) = source else {
+        return Ok(Json(serde_json::json!({ "similar": [] })));
+    };
+
+    // Find similar by matching style, script, or pin_code (excluding self)
+    let rows: Vec<(
+        Uuid,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        r#"SELECT id, image_url, thumbnail_small, detected_text, ml_style, ml_script
+           FROM letterings
+           WHERE id != $1 AND status = 'APPROVED'
+             AND (ml_style = $2 OR ml_script = $3 OR pin_code = $4)
+           ORDER BY
+             CASE WHEN ml_style = $2 AND ml_script = $3 THEN 0
+                  WHEN ml_style = $2 THEN 1
+                  WHEN ml_script = $3 THEN 2
+                  ELSE 3 END,
+             created_at DESC
+           LIMIT 6"#,
+    )
+    .bind(id)
+    .bind(&ml_style)
+    .bind(&ml_script)
+    .bind(&pin_code)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e: sqlx::Error| AppError::InternalError(e.to_string()))?;
+
+    let similar: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(id, image_url, thumbnail, detected_text, style, script)| {
+            serde_json::json!({
+                "id": id,
+                "image_url": image_url,
+                "thumbnail": thumbnail,
+                "detected_text": detected_text,
+                "ml_style": style,
+                "ml_script": script,
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "similar": similar })))
+}
+
+pub async fn download_lettering(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Redirect, AppError> {
+    let lettering = state
+        .lettering_repo
+        .find_by_id(id)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound("Lettering not found".to_string()))?;
+
+    Ok(Redirect::temporary(&lettering.image_url))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ReportRequest {
     pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LinkRevisitRequest {
+    pub revisit_lettering_id: Uuid,
+    pub notes: Option<String>,
 }
 
 pub async fn delete_lettering(
@@ -95,4 +229,75 @@ pub async fn report_lettering(
 
     tracing::info!(lettering_id = %id, "Lettering reported");
     Ok(StatusCode::OK)
+}
+
+pub async fn link_revisit(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<LinkRevisitRequest>,
+) -> Result<StatusCode, AppError> {
+    sqlx::query(
+        r#"INSERT INTO location_revisits (id, original_lettering_id, revisit_lettering_id, notes)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (original_lettering_id, revisit_lettering_id) DO NOTHING"#,
+    )
+    .bind(Uuid::now_v7())
+    .bind(id)
+    .bind(body.revisit_lettering_id)
+    .bind(body.notes)
+    .execute(&state.db)
+    .await
+    .map_err(|e: sqlx::Error| AppError::InternalError(e.to_string()))?;
+
+    Ok(StatusCode::CREATED)
+}
+
+pub async fn get_revisits(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let rows = sqlx::query(
+        r#"SELECT
+                lr.id,
+                lr.original_lettering_id,
+                lr.revisit_lettering_id,
+                lr.notes,
+                lr.created_at,
+                o.image_url as "original_image_url!",
+                o.created_at as "original_created_at!",
+                r.image_url as "revisit_image_url!",
+                r.created_at as "revisit_created_at!"
+           FROM location_revisits lr
+           JOIN letterings o ON o.id = lr.original_lettering_id
+           JOIN letterings r ON r.id = lr.revisit_lettering_id
+           WHERE lr.original_lettering_id = $1 OR lr.revisit_lettering_id = $1
+           ORDER BY lr.created_at DESC"#,
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e: sqlx::Error| AppError::InternalError(e.to_string()))?;
+
+    let revisits: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            serde_json::json!({
+                "id": row.get::<Uuid, _>("id"),
+                "original_lettering_id": row.get::<Uuid, _>("original_lettering_id"),
+                "revisit_lettering_id": row.get::<Uuid, _>("revisit_lettering_id"),
+                "notes": row.get::<Option<String>, _>("notes"),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                "original": {
+                    "image_url": row.get::<String, _>("original_image_url"),
+                    "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("original_created_at")
+                },
+                "revisit": {
+                    "image_url": row.get::<String, _>("revisit_image_url"),
+                    "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("revisit_created_at")
+                }
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "revisits": revisits })))
 }

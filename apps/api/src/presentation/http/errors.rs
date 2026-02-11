@@ -1,9 +1,6 @@
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
+use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
 use serde_json::json;
+use crate::domain::lettering::errors::DomainError;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -23,19 +20,31 @@ impl IntoResponse for AppError {
             AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::InternalError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
-        
         (status, Json(json!({ "error": message }))).into_response()
+    }
+}
+
+impl From<DomainError> for AppError {
+    fn from(err: DomainError) -> Self {
+        match err {
+            DomainError::NotFound(m) => AppError::NotFound(m),
+            DomainError::ValidationError(m) => AppError::ValidationError(m),
+            DomainError::InfrastructureError(m) => AppError::InternalError(m),
+            DomainError::RateLimitExceeded => AppError::BadRequest("Throttled".into()),
+            DomainError::Unauthorized => AppError::Forbidden("Unauthorized".into()),
+        }
     }
 }
 
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
-        AppError::InternalError(format!("Database error: {}", err))
+        AppError::InternalError(err.to_string())
     }
 }
 
-impl From<std::io::Error> for AppError {
-    fn from(err: std::io::Error) -> Self {
-        AppError::InternalError(format!("IO error: {}", err))
+// FIX: Added conversion from anyhow::Error to AppError
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        AppError::InternalError(err.to_string())
     }
 }

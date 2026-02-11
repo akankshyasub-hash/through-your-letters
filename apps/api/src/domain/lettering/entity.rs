@@ -4,7 +4,7 @@ use sqlx::types::ipnetwork::IpNetwork;
 use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Default)]
 #[ts(export)]
 pub struct Lettering {
     pub id: Uuid,
@@ -31,7 +31,7 @@ pub struct Lettering {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Default)]
 #[ts(export)]
 pub struct ThumbnailUrls {
     pub small: String,
@@ -39,7 +39,7 @@ pub struct ThumbnailUrls {
     pub large: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Default)]
 #[ts(export)]
 pub struct Coordinates {
     pub r#type: String,
@@ -55,10 +55,11 @@ pub struct ImageMetadata {
     pub color_palette: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::Type, Default, PartialEq)]
 #[sqlx(type_name = "text", rename_all = "SCREAMING_SNAKE_CASE")]
 #[ts(export)]
 pub enum LetteringStatus {
+    #[default]
     Pending,
     Approved,
     Rejected,

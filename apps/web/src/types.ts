@@ -15,6 +15,32 @@ export interface ZinePageData {
   description?: string;
   report_count?: number;
   report_reasons?: string[];
+  likes_count?: number;
+  comments_count?: number;
+  ml_script?: string;
+}
+
+export interface Comment {
+  id: string;
+  lettering_id: string;
+  content: string;
+  created_at: string;
+}
+
+export interface RevisitLink {
+  id: string;
+  original_lettering_id: string;
+  revisit_lettering_id: string;
+  notes?: string;
+  created_at: string;
+  original: {
+    image_url: string;
+    created_at: string;
+  };
+  revisit: {
+    image_url: string;
+    created_at: string;
+  };
 }
 
 export enum AppMode {
@@ -24,6 +50,36 @@ export enum AppMode {
   GUIDEBOOK = "GUIDEBOOK",
   MAP = "MAP",
   ADMIN = "ADMIN",
+  CONTRIBUTOR = "CONTRIBUTOR",
+  COMMUNITY = "COMMUNITY",
+}
+
+export interface LeaderboardEntry {
+  tag: string;
+  count: number;
+  total_likes: number;
+}
+
+export interface CollectionSummary {
+  id: string;
+  name: string;
+  description?: string;
+  creator_tag: string;
+  cover_image_url?: string;
+  item_count: number;
+  created_at: string;
+}
+
+export interface ChallengeData {
+  id: string;
+  title: string;
+  description?: string;
+  target_script?: string;
+  target_area?: string;
+  target_count: number;
+  current_count: number;
+  status: string;
+  ends_at?: string;
 }
 
 export interface Lettering {

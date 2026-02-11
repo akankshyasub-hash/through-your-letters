@@ -1,9 +1,30 @@
-import { useQuery } from '@tanstack/react-query';
-import { getGallery } from '../lib/api';
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { api } from "../lib/api";
+import { Lettering } from "../types";
 
-export function useLetteringGallery(limit: number = 50, offset: number = 0) {
-  return useQuery({
-    queryKey: ['letterings', limit, offset],
-    queryFn: () => getGallery({ limit, offset }),
+const PAGE_SIZE = 30;
+
+interface GalleryPage {
+  letterings: Lettering[];
+  total: number;
+}
+
+export function useInfiniteGallery(cityId?: string | null) {
+  return useInfiniteQuery<GalleryPage>({
+    queryKey: ["letterings-infinite", cityId ?? "all"],
+    queryFn: async ({ pageParam }) => {
+      const offset = pageParam as number;
+      const data = await api.getGallery(PAGE_SIZE, offset, cityId);
+      return data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const totalLoaded = allPages.reduce(
+        (sum, page) => sum + page.letterings.length,
+        0,
+      );
+      if (lastPage.letterings.length < PAGE_SIZE) return undefined;
+      return totalLoaded;
+    },
   });
 }

@@ -1,9 +1,13 @@
 pub mod admin;
 pub mod analytics;
 pub mod cities;
+pub mod community;
+pub mod docs;
 pub mod gallery;
+pub mod geo;
 pub mod health;
 pub mod letterings;
 pub mod search;
 pub mod social;
 pub mod upload;
+pub mod ws;

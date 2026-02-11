@@ -1,31 +1,14 @@
-use redis::Client;
-use anyhow::Result;
+use redis::{AsyncCommands, Client};
 
-pub struct RateLimiter {
-    redis: Client,
-    max_per_day: u32,
-}
-
+pub struct RateLimiter { client: Client }
 impl RateLimiter {
-    pub fn new(redis: Client, max_per_day: u32) -> Self {
-        Self { redis, max_per_day }
-    }
-
-    pub async fn check_rate_limit(&self, key: &str) -> Result<bool> {
-        let mut conn = self.redis.get_multiplexed_async_connection().await?;
-        let count: u32 = redis::cmd("INCR")
-            .arg(format!("rate_limit:{}", key))
-            .query_async(&mut conn)
-            .await?;
-        
-        if count == 1 {
-            redis::cmd("EXPIRE")
-                .arg(format!("rate_limit:{}", key))
-                .arg(86400)
-                .query_async::<_, ()>(&mut conn)
-                .await?;
-        }
-        
-        Ok(count <= self.max_per_day)
+    pub fn new(client: Client) -> Self { Self { client } }
+    pub async fn check(&self, key: &str, limit: u32) -> bool {
+        if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
+            let k = format!("rl:{}", key);
+            let count: u32 = conn.incr(&k, 1).await.unwrap_or(0);
+            if count == 1 { let _: () = conn.expire(&k, 3600).await.unwrap_or(()); }
+            count <= limit
+        } else { true }
     }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO comments (id, lettering_id, content, user_ip) \n            VALUES ($1, $2, $3, $4)",
+  "query": "INSERT INTO comments (id, lettering_id, content, user_ip) VALUES ($1, $2, $3, $4)",
   "describe": {
     "columns": [],
     "parameters": {
@@ -13,5 +13,5 @@
     },
     "nullable": []
   },
-  "hash": "f77d0acaa96e652138736fe46f68ad98c8a16a0bfd52706d50d41317505791c4"
+  "hash": "c4bb8424660c2300dec7faf711bfabb64c3e728a0bd50822ef83fef562cb9d33"
 }
