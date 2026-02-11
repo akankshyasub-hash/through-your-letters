@@ -3,7 +3,8 @@ use async_trait::async_trait;
 use image::imageops::FilterType;
 use ndarray::{Array, IxDyn};
 use ort::{session::Session, value::Value};
-use std::sync::Mutex; // Added Mutex
+use std::sync::Mutex;
+use std::path::Path;
 
 pub struct OnnxTextDetector {
     // Wrap Session in Mutex to allow mutable access (run) from immutable &self
@@ -13,7 +14,10 @@ pub struct OnnxTextDetector {
 
 impl OnnxTextDetector {
     pub fn new(model_path: &str, enabled: bool) -> anyhow::Result<Self> {
-        if !enabled {
+        if !enabled || !Path::new(model_path).exists() {
+            if enabled {
+                tracing::warn!("ML model file not found at {}. Local pre-checks will be skipped, falling back to primary OCR.", model_path);
+            }
             return Ok(Self {
                 session: None,
                 enabled: false,
@@ -23,7 +27,6 @@ impl OnnxTextDetector {
         let session = Session::builder()?.commit_from_file(model_path)?;
 
         Ok(Self {
-            // Initialize the Mutex
             session: Some(Mutex::new(session)),
             enabled: true,
         })
