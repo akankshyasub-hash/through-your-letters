@@ -24,6 +24,7 @@ pub struct Config {
     pub pending_auto_approve_minutes: i64,
     pub pending_auto_approve_interval_seconds: u64,
     pub pending_auto_approve_batch_size: i64,
+    pub ignore_missing_migrations: bool,
 }
 
 impl Config {
@@ -69,6 +70,9 @@ impl Config {
             .parse()?,
             pending_auto_approve_batch_size: std::env::var("PENDING_AUTO_APPROVE_BATCH_SIZE")
                 .unwrap_or("50".into())
+                .parse()?,
+            ignore_missing_migrations: std::env::var("IGNORE_MISSING_MIGRATIONS")
+                .unwrap_or("true".into())
                 .parse()?,
         })
     }

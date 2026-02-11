@@ -26,7 +26,9 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
     let db = create_pool(&config.database_url, config.database_max_connections).await?;
-    sqlx::migrate!("./migrations").run(&db).await?;
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(config.ignore_missing_migrations);
+    migrator.run(&db).await?;
 
     let redis = redis::Client::open(config.redis_url.clone())?;
     let queue = Arc::new(RedisQueue::new(redis.clone()));
