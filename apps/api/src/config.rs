@@ -28,22 +28,27 @@ pub struct Config {
 }
 
 impl Config {
+    fn require_env(name: &str) -> anyhow::Result<String> {
+        std::env::var(name)
+            .map_err(|_| anyhow::anyhow!("Required environment variable {} is not set", name))
+    }
+
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
-            database_url: std::env::var("DATABASE_URL")?,
+            database_url: Self::require_env("DATABASE_URL")?,
             database_max_connections: std::env::var("DATABASE_MAX_CONNECTIONS")
                 .unwrap_or("10".into())
                 .parse()?,
-            redis_url: std::env::var("REDIS_URL")?,
+            redis_url: Self::require_env("REDIS_URL")?,
             redis_max_connections: std::env::var("REDIS_MAX_CONNECTIONS")
                 .unwrap_or("10".into())
                 .parse()?,
-            r2_access_key_id: std::env::var("R2_ACCESS_KEY_ID")?,
-            r2_secret_access_key: std::env::var("R2_SECRET_ACCESS_KEY")?,
-            r2_endpoint: std::env::var("R2_ENDPOINT")?,
-            r2_bucket_name: std::env::var("R2_BUCKET_NAME")?,
+            r2_access_key_id: Self::require_env("R2_ACCESS_KEY_ID")?,
+            r2_secret_access_key: Self::require_env("R2_SECRET_ACCESS_KEY")?,
+            r2_endpoint: Self::require_env("R2_ENDPOINT")?,
+            r2_bucket_name: Self::require_env("R2_BUCKET_NAME")?,
             r2_region: std::env::var("R2_REGION").unwrap_or("auto".into()),
-            r2_public_url: std::env::var("R2_PUBLIC_URL")?,
+            r2_public_url: Self::require_env("R2_PUBLIC_URL")?,
             host: std::env::var("HOST").unwrap_or("0.0.0.0".into()),
             port: std::env::var("PORT").unwrap_or("3000".into()).parse()?,
             cors_allowed_origins: std::env::var("CORS_ALLOWED_ORIGINS")
