@@ -1,16 +1,19 @@
-use sqlx::PgPool;
-use std::sync::Arc;
-use tokio::sync::broadcast;
 use crate::{
     config::Config,
     infrastructure::{
-        storage::traits::StorageService,
         ml::traits::MlService,
         queue::redis_queue::RedisQueue,
-        repositories::{sqlx_lettering_repository::SqlxLetteringRepository, sqlx_social_repository::SqlxSocialRepository},
+        repositories::{
+            sqlx_lettering_repository::SqlxLetteringRepository,
+            sqlx_social_repository::SqlxSocialRepository,
+        },
         security::virus_scanner::VirusScanner,
+        storage::traits::StorageService,
     },
 };
+use sqlx::PgPool;
+use std::sync::Arc;
+use tokio::sync::broadcast;
 
 #[derive(Clone)]
 pub struct AppState {

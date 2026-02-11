@@ -1,6 +1,6 @@
 use axum::{
-    extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
 use serde::Serialize;
 use uuid::Uuid;
@@ -44,7 +44,7 @@ pub async fn get_city(
     .ok_or_else(|| AppError::NotFound("City not found".into()))?;
 
     let count: (Option<i64>,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM letterings WHERE city_id = $1 AND status = 'APPROVED'"
+        "SELECT COUNT(*) FROM letterings WHERE city_id = $1 AND status = 'APPROVED'",
     )
     .bind(id)
     .fetch_one(&state.db)

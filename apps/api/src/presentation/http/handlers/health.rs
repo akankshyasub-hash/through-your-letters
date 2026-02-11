@@ -1,11 +1,6 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use serde::Serialize;
 use crate::presentation::http::state::AppState;
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use serde::Serialize;
 
 #[derive(Serialize)]
 struct HealthResponse {

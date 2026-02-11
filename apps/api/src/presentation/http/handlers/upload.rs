@@ -37,11 +37,11 @@ async fn approve_without_ml(
     lettering_id: Uuid,
     fallback_text: &str,
 ) -> Result<(), AppError> {
-    sqlx::query!(
+    sqlx::query(
         "UPDATE letterings SET detected_text = $1, status = 'APPROVED', updated_at = NOW() WHERE id = $2",
-        fallback_text,
-        lettering_id
     )
+    .bind(fallback_text)
+    .bind(lettering_id)
     .execute(&state.db)
     .await
     .map_err(|e| AppError::InternalError(format!("Auto-approval failed: {}", e)))?;

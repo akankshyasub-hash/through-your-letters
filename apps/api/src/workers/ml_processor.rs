@@ -1,8 +1,10 @@
-use crate::infrastructure::{ml::onnx_text_detector::OnnxTextDetector, ml::traits::MlService, queue::redis_queue::RedisQueue};
+use crate::infrastructure::{
+    ml::onnx_text_detector::OnnxTextDetector, ml::traits::MlService, queue::redis_queue::RedisQueue,
+};
+use reqwest::StatusCode;
 use sqlx::PgPool;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
-use reqwest::StatusCode;
 
 pub struct MlProcessor {
     db: PgPool,
@@ -13,12 +15,27 @@ pub struct MlProcessor {
 }
 
 impl MlProcessor {
-    pub fn new(db: PgPool, detector: Arc<OnnxTextDetector>, queue: Arc<RedisQueue>, hf_token: Option<String>, broadcaster: Arc<broadcast::Sender<String>>) -> Self {
-        Self { db, detector, queue, hf_token, broadcaster }
+    pub fn new(
+        db: PgPool,
+        detector: Arc<OnnxTextDetector>,
+        queue: Arc<RedisQueue>,
+        hf_token: Option<String>,
+        broadcaster: Arc<broadcast::Sender<String>>,
+    ) -> Self {
+        Self {
+            db,
+            detector,
+            queue,
+            hf_token,
+            broadcaster,
+        }
     }
 
     pub async fn start(&self) {
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build().unwrap();
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()
+            .unwrap();
         loop {
             if let Ok(Some(job)) = self.queue.dequeue_ml_job().await {
                 let bytes = match client.get(&job.image_url).send().await {
@@ -30,7 +47,11 @@ impl MlProcessor {
                 let onnx_says_text = self.detector.detect_text(&bytes).await.is_ok();
 
                 // Primary: HuggingFace Handwriting OCR
-                let mut text = if onnx_says_text { self.huggingface_ocr(&client, &bytes).await } else { None };
+                let mut text = if onnx_says_text {
+                    self.huggingface_ocr(&client, &bytes).await
+                } else {
+                    None
+                };
 
                 if text.is_none() && onnx_says_text {
                     text = Some("Handcrafted Lettering".into());
@@ -40,10 +61,16 @@ impl MlProcessor {
                 let palette = serde_json::to_value(&colors).unwrap_or_default();
 
                 // Classify style
-                let style = self.detector.classify_style(&bytes).await
+                let style = self
+                    .detector
+                    .classify_style(&bytes)
+                    .await
                     .map(|s| s.style)
                     .unwrap_or_else(|_| "unknown".into());
-                let style_confidence = self.detector.classify_style(&bytes).await
+                let style_confidence = self
+                    .detector
+                    .classify_style(&bytes)
+                    .await
                     .map(|s| s.confidence)
                     .unwrap_or(0.0);
 
@@ -56,7 +83,9 @@ impl MlProcessor {
                     detected_text_str, palette, style, script, style_confidence, job.lettering_id
                 ).execute(&self.db).await;
 
-                let _ = self.broadcaster.send(serde_json::json!({"type": "PROCESSED", "id": job.lettering_id}).to_string());
+                let _ = self.broadcaster.send(
+                    serde_json::json!({"type": "PROCESSED", "id": job.lettering_id}).to_string(),
+                );
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
@@ -67,12 +96,22 @@ impl MlProcessor {
         let url = "https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten";
 
         for _ in 0..3 {
-            let res = client.post(url).header("Authorization", format!("Bearer {}", token))
-                .body(data.to_vec()).send().await.ok()?;
+            let res = client
+                .post(url)
+                .header("Authorization", format!("Bearer {}", token))
+                .body(data.to_vec())
+                .send()
+                .await
+                .ok()?;
 
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.ok()?;
-                return json.as_array()?.first()?.get("generated_text")?.as_str().map(|s| s.to_string());
+                return json
+                    .as_array()?
+                    .first()?
+                    .get("generated_text")?
+                    .as_str()
+                    .map(|s| s.to_string());
             } else if res.status() == StatusCode::SERVICE_UNAVAILABLE {
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 continue;
@@ -103,7 +142,10 @@ impl MlProcessor {
                 *counts.entry(s).or_insert(0) += 1;
             }
         }
-        counts.into_iter().max_by_key(|(_, c)| *c).map(|(s, _)| s.to_string())
+        counts
+            .into_iter()
+            .max_by_key(|(_, c)| *c)
+            .map(|(s, _)| s.to_string())
     }
 
     fn extract_colors(&self, data: &[u8]) -> Vec<String> {
@@ -112,13 +154,20 @@ impl MlProcessor {
             for y in (0..img.height()).step_by(25) {
                 for x in (0..img.width()).step_by(25) {
                     let p = img.get_pixel(x, y);
-                    let hex = format!("#{:02X}{:02X}{:02X}", (p[0]/32)*32, (p[1]/32)*32, (p[2]/32)*32);
+                    let hex = format!(
+                        "#{:02X}{:02X}{:02X}",
+                        (p[0] / 32) * 32,
+                        (p[1] / 32) * 32,
+                        (p[2] / 32) * 32
+                    );
                     *counts.entry(hex).or_insert(0) += 1;
                 }
             }
             let mut v: Vec<_> = counts.into_iter().collect();
-            v.sort_by(|a,b| b.1.cmp(&a.1));
-            v.into_iter().take(3).map(|(k,_)| k).collect()
-        } else { vec![] }
+            v.sort_by(|a, b| b.1.cmp(&a.1));
+            v.into_iter().take(3).map(|(k, _)| k).collect()
+        } else {
+            vec![]
+        }
     }
 }

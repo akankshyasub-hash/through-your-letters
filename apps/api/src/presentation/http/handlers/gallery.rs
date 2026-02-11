@@ -1,12 +1,16 @@
-use axum::{extract::{Query, State}, http::StatusCode, Json};
-use serde::Deserialize;
-use uuid::Uuid;
 use crate::{
     application::get_letterings::{dto::PaginatedResponse, use_case::GetLetteringsUseCase},
+    domain::lettering::repository::LetteringRepository,
     infrastructure::repositories::sqlx_lettering_repository::SqlxLetteringRepository,
     presentation::http::state::AppState,
-    domain::lettering::repository::LetteringRepository,
 };
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
+use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
@@ -17,7 +21,9 @@ pub struct PaginationQuery {
     city_id: Option<Uuid>,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 pub async fn get_letterings(
     State(state): State<AppState>,

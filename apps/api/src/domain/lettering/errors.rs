@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ts_rs::TS;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Error, Serialize, Deserialize, TS)]
 #[ts(export)]

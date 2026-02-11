@@ -1,5 +1,7 @@
-use crate::domain::lettering::{entity::Lettering, errors::DomainError, repository::LetteringRepository};
 use super::dto::SearchRequest;
+use crate::domain::lettering::{
+    entity::Lettering, errors::DomainError, repository::LetteringRepository,
+};
 
 pub struct SearchLetteringsUseCase {
     repository: Box<dyn LetteringRepository>,

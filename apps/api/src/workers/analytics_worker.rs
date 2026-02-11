@@ -1,9 +1,13 @@
 use sqlx::PgPool;
 use std::time::Duration;
 
-pub struct AnalyticsWorker { db: PgPool }
+pub struct AnalyticsWorker {
+    db: PgPool,
+}
 impl AnalyticsWorker {
-    pub fn new(db: PgPool) -> Self { Self { db } }
+    pub fn new(db: PgPool) -> Self {
+        Self { db }
+    }
     pub async fn start(&self) {
         loop {
             // Simplified query to ensure no unknown column errors

@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -80,15 +80,19 @@ pub async fn list_collections(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(id, name, description, creator_tag, is_public, created_at, item_count)| CollectionResponse {
-                id,
-                name,
-                description,
-                creator_tag,
-                is_public,
-                item_count: item_count.unwrap_or(0),
-                created_at,
-            })
+            .map(
+                |(id, name, description, creator_tag, is_public, created_at, item_count)| {
+                    CollectionResponse {
+                        id,
+                        name,
+                        description,
+                        creator_tag,
+                        is_public,
+                        item_count: item_count.unwrap_or(0),
+                        created_at,
+                    }
+                },
+            )
             .collect(),
     ))
 }
@@ -103,14 +107,16 @@ pub async fn create_collection(
     }
 
     let id = Uuid::now_v7();
-    sqlx::query("INSERT INTO collections (id, name, description, creator_tag) VALUES ($1, $2, $3, $4)")
-        .bind(id)
-        .bind(&name)
-        .bind(&body.description)
-        .bind(&body.creator_tag)
-        .execute(&state.db)
-        .await
-        .map_err(|e: sqlx::Error| AppError::InternalError(e.to_string()))?;
+    sqlx::query(
+        "INSERT INTO collections (id, name, description, creator_tag) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(id)
+    .bind(&name)
+    .bind(&body.description)
+    .bind(&body.creator_tag)
+    .execute(&state.db)
+    .await
+    .map_err(|e: sqlx::Error| AppError::InternalError(e.to_string()))?;
 
     Ok((
         StatusCode::CREATED,

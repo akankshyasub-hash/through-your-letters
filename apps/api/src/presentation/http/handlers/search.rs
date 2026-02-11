@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    Json,
 };
 use serde::Deserialize;
 
@@ -19,7 +19,9 @@ pub struct SearchQuery {
     limit: i64,
 }
 
-fn default_limit() -> i64 { 20 }
+fn default_limit() -> i64 {
+    20
+}
 
 pub async fn search_letterings(
     State(state): State<AppState>,
@@ -27,15 +29,16 @@ pub async fn search_letterings(
 ) -> Result<Json<Vec<Lettering>>, StatusCode> {
     let repository = SqlxLetteringRepository::new(state.db.clone());
     let use_case = SearchLetteringsUseCase::new(Box::new(repository));
-    
+
     let request = SearchRequest {
         query: params.q,
         limit: Some(params.limit),
     };
-    
-    let results = use_case.execute(request)
+
+    let results = use_case
+        .execute(request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     Ok(Json(results))
 }

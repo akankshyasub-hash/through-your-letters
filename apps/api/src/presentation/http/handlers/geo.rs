@@ -1,6 +1,9 @@
-use axum::{extract::{State, Query}, Json};
+use crate::presentation::http::{errors::AppError, state::AppState};
+use axum::{
+    Json,
+    extract::{Query, State},
+};
 use serde::{Deserialize, Serialize};
-use crate::presentation::http::{state::AppState, errors::AppError};
 
 #[derive(Serialize)]
 pub struct Marker {
@@ -31,15 +34,22 @@ pub async fn get_all_markers(State(state): State<AppState>) -> Result<Json<Vec<M
            FROM letterings WHERE status = 'APPROVED' LIMIT 1000"#
     ).fetch_all(&state.db).await.map_err(|e| AppError::InternalError(e.to_string()))?;
 
-    Ok(Json(rows.into_iter().map(|r| Marker {
-        id: r.id,
-        lat: r.lat,
-        lng: r.lng,
-        thumbnail: r.thumbnail_small,
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| Marker {
+                id: r.id,
+                lat: r.lat,
+                lng: r.lng,
+                thumbnail: r.thumbnail_small,
+            })
+            .collect(),
+    ))
 }
 
-pub async fn get_nearby_markers(State(state): State<AppState>, Query(q): Query<NearbyQuery>) -> Result<Json<Vec<Marker>>, AppError> {
+pub async fn get_nearby_markers(
+    State(state): State<AppState>,
+    Query(q): Query<NearbyQuery>,
+) -> Result<Json<Vec<Marker>>, AppError> {
     let rows = sqlx::query!(
         r#"SELECT id, COALESCE(thumbnail_small, '') as "thumbnail_small!", ST_Y(location::geometry) as "lat!", ST_X(location::geometry) as "lng!"
            FROM letterings
@@ -48,15 +58,21 @@ pub async fn get_nearby_markers(State(state): State<AppState>, Query(q): Query<N
         q.lng, q.lat, q.radius_m
     ).fetch_all(&state.db).await.map_err(|e| AppError::InternalError(e.to_string()))?;
 
-    Ok(Json(rows.into_iter().map(|r| Marker {
-        id: r.id,
-        lat: r.lat,
-        lng: r.lng,
-        thumbnail: r.thumbnail_small,
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| Marker {
+                id: r.id,
+                lat: r.lat,
+                lng: r.lng,
+                thumbnail: r.thumbnail_small,
+            })
+            .collect(),
+    ))
 }
 
-pub async fn get_coverage(State(state): State<AppState>) -> Result<Json<Vec<CoveragePoint>>, AppError> {
+pub async fn get_coverage(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<CoveragePoint>>, AppError> {
     let rows: Vec<(String, f64, f64, i64)> = sqlx::query_as(
         r#"SELECT
                 pin_code,

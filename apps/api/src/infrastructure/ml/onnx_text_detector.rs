@@ -1,9 +1,9 @@
+use super::traits::{MlService, StyleClassification, TextDetectionResult};
 use async_trait::async_trait;
 use image::imageops::FilterType;
 use ndarray::{Array, IxDyn};
 use ort::{session::Session, value::Value};
 use std::sync::Mutex; // Added Mutex
-use super::traits::{MlService, TextDetectionResult, StyleClassification};
 
 pub struct OnnxTextDetector {
     // Wrap Session in Mutex to allow mutable access (run) from immutable &self
@@ -20,8 +20,7 @@ impl OnnxTextDetector {
             });
         }
 
-        let session = Session::builder()?
-            .commit_from_file(model_path)?;
+        let session = Session::builder()?.commit_from_file(model_path)?;
 
         Ok(Self {
             // Initialize the Mutex
@@ -98,7 +97,9 @@ impl MlService for OnnxTextDetector {
         // LOCK THE SESSION
         // We need a mutable reference to run the session, so we lock the Mutex.
         let session_mutex = self.session.as_ref().unwrap();
-        let mut session = session_mutex.lock().map_err(|_| anyhow::anyhow!("Failed to acquire session lock"))?;
+        let mut session = session_mutex
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire session lock"))?;
 
         // Run inference
         let outputs = session.run(ort::inputs![input_value])?;
@@ -111,7 +112,11 @@ impl MlService for OnnxTextDetector {
         let output_array = Array::from_shape_vec(IxDyn(&shape_vec), extract_data.to_vec())?;
 
         let detected_text = self.extract_text_from_detections(&output_array);
-        let confidence = if detected_text.is_empty() || detected_text == "No text detected" { 0.0 } else { 0.85 };
+        let confidence = if detected_text.is_empty() || detected_text == "No text detected" {
+            0.0
+        } else {
+            0.85
+        };
 
         Ok(TextDetectionResult {
             detected_text,
@@ -134,16 +139,19 @@ impl MlService for OnnxTextDetector {
         let mut edge_count = 0;
         let (width, height) = gray.dimensions();
 
-        for y in 1..height-1 {
-            for x in 1..width-1 {
+        for y in 1..height - 1 {
+            for x in 1..width - 1 {
                 let center = gray.get_pixel(x, y)[0] as i32;
-                let left = gray.get_pixel(x-1, y)[0] as i32;
-                let right = gray.get_pixel(x+1, y)[0] as i32;
-                let top = gray.get_pixel(x, y-1)[0] as i32;
-                let bottom = gray.get_pixel(x, y+1)[0] as i32;
+                let left = gray.get_pixel(x - 1, y)[0] as i32;
+                let right = gray.get_pixel(x + 1, y)[0] as i32;
+                let top = gray.get_pixel(x, y - 1)[0] as i32;
+                let bottom = gray.get_pixel(x, y + 1)[0] as i32;
 
-                let gradient = ((center - left).abs() + (center - right).abs() +
-                               (center - top).abs() + (center - bottom).abs()) / 4;
+                let gradient = ((center - left).abs()
+                    + (center - right).abs()
+                    + (center - top).abs()
+                    + (center - bottom).abs())
+                    / 4;
 
                 if gradient > 30 {
                     edge_count += 1;
@@ -173,7 +181,7 @@ impl MlService for OnnxTextDetector {
         let color_variance = ((r_sum / count - g_sum / count).powi(2)
             + (g_sum / count - b_sum / count).powi(2)
             + (r_sum / count - b_sum / count).powi(2))
-            .sqrt();
+        .sqrt();
 
         let style = if edge_ratio > 0.35 && color_variance > 40.0 {
             "graffiti"

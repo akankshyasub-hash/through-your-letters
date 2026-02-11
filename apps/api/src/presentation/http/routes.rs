@@ -1,5 +1,8 @@
 use super::{
-    handlers::{admin, analytics, cities, community, docs, gallery, geo, health, letterings, search, social, upload, ws},
+    handlers::{
+        admin, analytics, cities, community, docs, gallery, geo, health, letterings, search,
+        social, upload, ws,
+    },
     middleware::admin::require_admin,
     middleware::rate_limit::rate_limit_middleware,
     state::AppState,
@@ -81,10 +84,19 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/geo/nearby", get(geo::get_nearby_markers))
         .route("/api/v1/geo/coverage", get(geo::get_coverage))
         // Community
-        .route("/api/v1/community/leaderboard", get(community::get_leaderboard))
-        .route("/api/v1/collections", get(community::list_collections).post(community::create_collection))
+        .route(
+            "/api/v1/community/leaderboard",
+            get(community::get_leaderboard),
+        )
+        .route(
+            "/api/v1/collections",
+            get(community::list_collections).post(community::create_collection),
+        )
         .route("/api/v1/collections/{id}", get(community::get_collection))
-        .route("/api/v1/collections/{collection_id}/items/{lettering_id}", post(community::add_to_collection).delete(community::remove_from_collection))
+        .route(
+            "/api/v1/collections/{collection_id}/items/{lettering_id}",
+            post(community::add_to_collection).delete(community::remove_from_collection),
+        )
         .route("/api/v1/challenges", get(community::list_challenges))
         // Cities
         .route("/api/v1/cities", get(cities::list_cities))

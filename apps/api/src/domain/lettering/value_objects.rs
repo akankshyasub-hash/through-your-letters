@@ -1,6 +1,6 @@
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use lazy_static::lazy_static;
 
 lazy_static! {
     static ref PIN_CODE_REGEX: regex::Regex = regex::Regex::new(r"^56\d{4}$").unwrap();

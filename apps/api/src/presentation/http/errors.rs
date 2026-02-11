@@ -1,6 +1,10 @@
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
-use serde_json::json;
 use crate::domain::lettering::errors::DomainError;
+use axum::{
+    Json,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+use serde_json::json;
 
 #[derive(Debug)]
 pub enum AppError {
