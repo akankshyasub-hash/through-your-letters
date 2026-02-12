@@ -7,8 +7,9 @@ target
 coverage
 .turbo
 *package-lock.json
-**/docs/*.md
+**/docs/
 apps/**/*.md
 env
 *.sh
 nul
+.editor*
