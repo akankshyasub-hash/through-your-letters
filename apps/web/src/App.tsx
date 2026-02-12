@@ -227,18 +227,43 @@ const App: React.FC = () => {
     }, []),
   );
 
+  // const handleDelete = async (id: string | number) => {
+  //   if (!window.confirm("Permanently delete this specimen?")) return;
+  //   try {
+  //     const res = await fetch(`${API_BASE_URL}/api/v1/letterings/${id}`, {
+  //       method: "DELETE",
+  //     });
+  //     if (res.ok) {
+  //       addToast("Specimen deleted", "success");
+  //       refetch();
+  //     } else throw new Error();
+  //   } catch {
+  //     addToast("Delete failed", "error");
+  //   }
+  // };
+  const adminToken = sessionStorage.getItem("ttl_admin_token");
+
   const handleDelete = async (id: string | number) => {
+    if (!adminToken) return; // Safety check
     if (!window.confirm("Permanently delete this specimen?")) return;
+    
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/letterings/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/letterings/${id}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${adminToken}` // Must include the token
+        }
       });
+      
       if (res.ok) {
-        addToast("Specimen deleted", "success");
-        refetch();
-      } else throw new Error();
+        addToast("Specimen deleted by curator", "success");
+        refetch(); // Refresh the gallery
+      } else {
+        const err = await res.json();
+        addToast(err.error || "Delete failed", "error");
+      }
     } catch {
-      addToast("Delete failed", "error");
+      addToast("Network error", "error");
     }
   };
 
@@ -379,7 +404,8 @@ const App: React.FC = () => {
                   <ZinePage
                     key={page.id}
                     page={page}
-                    onDelete={handleDelete}
+                    // 2. Only pass onDelete if the user is an admin
+                    onDelete={adminToken ? handleDelete : undefined} 
                     onImageClick={() =>
                       setLightbox({
                         imageUrl: page.image,
@@ -393,6 +419,23 @@ const App: React.FC = () => {
                         : undefined
                     }
                   />
+                //   <ZinePage
+                //     key={page.id}
+                //     page={page}
+                //     onDelete={handleDelete}
+                //     onImageClick={() =>
+                //       setLightbox({
+                //         imageUrl: page.image,
+                //         title: page.title,
+                //         letteringId: page.id,
+                //       })
+                //     }
+                //     onContributorClick={
+                //       page.contributorName
+                //         ? () => openContributor(page.contributorName!)
+                //         : undefined
+                //     }
+                //   />
                 ))}
 
               {/* Infinite scroll sentinel */}

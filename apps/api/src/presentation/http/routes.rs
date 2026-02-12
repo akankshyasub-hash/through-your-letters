@@ -49,7 +49,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/letterings/search", get(search::search_letterings))
         .route(
             "/api/v1/letterings/{id}",
-            get(letterings::get_lettering).delete(letterings::delete_lettering),
+            // get(letterings::get_lettering).delete(letterings::delete_lettering),
+            get(letterings::get_lettering),
         )
         .route(
             "/api/v1/letterings/{id}/report",
