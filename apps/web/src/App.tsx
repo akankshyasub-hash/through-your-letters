@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import {
   Routes,
   Route,
@@ -21,19 +21,20 @@ import {
   Trophy,
 } from "lucide-react";
 
-// Pages (lazy would be nice but keeping simple for now)
-import ExplorePage from "./pages/ExplorePage";
-import AboutPage from "./pages/AboutPage";
-import NotFoundPage from "./pages/NotFoundPage";
-import LetteringDetailPage from "./pages/LetteringDetailPage";
-import AuthPage from "./pages/AuthPage";
-import MyUploadsPage from "./pages/MyUploadsPage";
-import NotificationsPage from "./pages/NotificationsPage";
-import ContributionPanel from "./components/ContributionPanel";
-import MapSection from "./components/MapSection";
-import AdminPanel from "./components/AdminPanel";
-import ContributorProfile from "./components/ContributorProfile";
-import CommunityPage from "./components/CommunityPage";
+const ExplorePage = lazy(() => import("./pages/ExplorePage"));
+const AboutPage = lazy(() => import("./pages/AboutPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const LetteringDetailPage = lazy(() => import("./pages/LetteringDetailPage"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const MyUploadsPage = lazy(() => import("./pages/MyUploadsPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const ContributionPanel = lazy(() => import("./components/ContributionPanel"));
+const MapSection = lazy(() => import("./components/MapSection"));
+const AdminPanel = lazy(() => import("./components/AdminPanel"));
+const ContributorProfile = lazy(
+  () => import("./components/ContributorProfile"),
+);
+const CommunityPage = lazy(() => import("./components/CommunityPage"));
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -85,28 +86,30 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-y-auto px-6 md:px-16 py-16 relative">
         <ErrorBoundary>
-          <Routes>
-            <Route path="/" element={<ExplorePage />} />
-            <Route path="/contribute" element={<ContributeRoute />} />
-            <Route path="/map" element={<MapSection />} />
-            <Route path="/community" element={<CommunityPage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/me/uploads" element={<MyUploadsPage />} />
-            <Route path="/me/notifications" element={<NotificationsPage />} />
-            <Route
-              path="/admin"
-              element={<AdminPanel onClose={() => window.history.back()} />}
-            />
-            <Route
-              path="/contributor/:tag"
-              element={
-                <ContributorProfile onBack={() => window.history.back()} />
-              }
-            />
-            <Route path="/lettering/:id" element={<LetteringDetailPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
+              <Route path="/" element={<ExplorePage />} />
+              <Route path="/contribute" element={<ContributeRoute />} />
+              <Route path="/map" element={<MapSection />} />
+              <Route path="/community" element={<CommunityPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/me/uploads" element={<MyUploadsPage />} />
+              <Route path="/me/notifications" element={<NotificationsPage />} />
+              <Route
+                path="/admin"
+                element={<AdminPanel onClose={() => window.history.back()} />}
+              />
+              <Route
+                path="/contributor/:tag"
+                element={
+                  <ContributorProfile onBack={() => window.history.back()} />
+                }
+              />
+              <Route path="/lettering/:id" element={<LetteringDetailPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
 
@@ -142,6 +145,16 @@ function BottomNav() {
         </NavLink>
       ))}
     </nav>
+  );
+}
+
+function RouteLoading() {
+  return (
+    <div className="py-24 text-center">
+      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+        Loading view...
+      </p>
+    </div>
   );
 }
 

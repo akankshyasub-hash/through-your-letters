@@ -238,6 +238,8 @@ pub async fn get_moderation_queue(
     Query(params): Query<ModerationQuery>,
 ) -> Result<Json<ModerationQueueResponse>, AppError> {
     let status_filter = params.status.to_uppercase();
+    let safe_limit = params.limit.clamp(1, 200);
+    let safe_offset = params.offset.max(0);
 
     let (items, total) = if status_filter == "ALL" {
         let items = sqlx::query_as!(
@@ -248,8 +250,8 @@ pub async fn get_moderation_queue(
                FROM letterings
                ORDER BY created_at DESC
                LIMIT $1 OFFSET $2"#,
-            params.limit,
-            params.offset,
+            safe_limit,
+            safe_offset,
         )
         .fetch_all(&state.db)
         .await
@@ -273,8 +275,8 @@ pub async fn get_moderation_queue(
                ORDER BY created_at ASC
                LIMIT $2 OFFSET $3"#,
             status_filter,
-            params.limit,
-            params.offset,
+            safe_limit,
+            safe_offset,
         )
         .fetch_all(&state.db)
         .await
@@ -347,7 +349,9 @@ pub async fn reject_lettering(
     Path(id): Path<Uuid>,
     Json(body): Json<RejectRequest>,
 ) -> Result<StatusCode, AppError> {
-    let reason = body.reason.unwrap_or_else(|| "Rejected by admin".to_string());
+    let reason = body
+        .reason
+        .unwrap_or_else(|| "Rejected by admin".to_string());
 
     let result = sqlx::query(
         "UPDATE letterings
@@ -609,7 +613,9 @@ pub async fn list_audit_logs(
         count_qb.push(" AND action = ").push_bind(action);
     }
     if let Some(lettering_id) = params.lettering_id {
-        count_qb.push(" AND lettering_id = ").push_bind(lettering_id);
+        count_qb
+            .push(" AND lettering_id = ")
+            .push_bind(lettering_id);
     }
     if let Some(country_code) = &country_code {
         count_qb

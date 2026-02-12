@@ -69,6 +69,7 @@ cd apps/api && SQLX_OFFLINE=true cargo check
 - `docs/API.md` API contract
 - `docs/ARCHITECTURE.md` system architecture and module boundaries
 - `docs/DEPLOYMENT.md` deployment and operational runbook
+- `docs/setupoci/README.md` Oracle Cloud Always Free backend setup (Supabase + OCI runtime)
 - `docs/PRODUCTION_CHECKLIST.md` release checklist
 - `docs/region-policies-and-i18n.md` region policy and locale-aware search behavior
 - `docs/ROADMAP.md` product roadmap and future implementation plan

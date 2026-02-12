@@ -134,7 +134,9 @@ impl SocialRepository for SqlxSocialRepository {
         let row = sqlx::query_as::<_, Comment>(
             "SELECT c.id, c.lettering_id, c.content, c.user_id, \
                     COALESCE(NULLIF(u.display_name, ''), u.email, 'Anonymous') as commenter_name, \
-                    c.status, c.moderation_score, c.moderation_flags, c.auto_flagged, c.needs_review, c.review_priority, \
+                    c.status, c.moderation_score, \
+                    COALESCE(ARRAY(SELECT jsonb_array_elements_text(c.moderation_flags)), ARRAY[]::text[]) as moderation_flags, \
+                    c.auto_flagged, c.needs_review, c.review_priority, \
                     c.user_ip, c.moderated_at, c.moderated_by, c.moderation_reason, c.created_at, c.updated_at \
              FROM comments c \
              LEFT JOIN users u ON u.id = c.user_id \
@@ -152,7 +154,9 @@ impl SocialRepository for SqlxSocialRepository {
         let rows = sqlx::query_as::<_, Comment>(
             "SELECT c.id, c.lettering_id, c.content, c.user_id, \
                     COALESCE(NULLIF(u.display_name, ''), u.email, 'Anonymous') as commenter_name, \
-                    c.status, c.moderation_score, c.moderation_flags, c.auto_flagged, c.needs_review, c.review_priority, \
+                    c.status, c.moderation_score, \
+                    COALESCE(ARRAY(SELECT jsonb_array_elements_text(c.moderation_flags)), ARRAY[]::text[]) as moderation_flags, \
+                    c.auto_flagged, c.needs_review, c.review_priority, \
                     c.user_ip, c.moderated_at, c.moderated_by, c.moderation_reason, c.created_at, c.updated_at \
              FROM comments c \
              LEFT JOIN users u ON u.id = c.user_id \

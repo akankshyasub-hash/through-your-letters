@@ -168,7 +168,10 @@ const MyUploadsPage: React.FC = () => {
       const timeline = await api.getMyUploadTimeline(id);
       setTimelineById((prev) => ({ ...prev, [id]: timeline }));
     } catch (err) {
-      addToast(err instanceof Error ? err.message : "Timeline load failed", "error");
+      addToast(
+        err instanceof Error ? err.message : "Timeline load failed",
+        "error",
+      );
     } finally {
       setTimelineLoadingId(null);
     }
@@ -288,7 +291,8 @@ const MyUploadsPage: React.FC = () => {
                       Moderation Feedback
                     </p>
                     <p className="text-sm text-slate-700">
-                      {item.moderation_reason || "No moderation note recorded yet."}
+                      {item.moderation_reason ||
+                        "No moderation note recorded yet."}
                     </p>
                     <p className="text-[10px] font-bold uppercase text-slate-500 flex items-center gap-1">
                       <Clock3 size={12} />
@@ -317,7 +321,9 @@ const MyUploadsPage: React.FC = () => {
                       <input
                         value={draftPinCode}
                         onChange={(e) =>
-                          setDraftPinCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                          setDraftPinCode(
+                            e.target.value.replace(/\D/g, "").slice(0, 6),
+                          )
                         }
                         className="w-full border-2 border-black p-3 text-sm outline-none focus:border-[#cc543a]"
                         placeholder="PIN code"
@@ -373,7 +379,9 @@ const MyUploadsPage: React.FC = () => {
                       className="inline-flex items-center gap-2 border-2 border-black px-4 py-2 text-[10px] font-black uppercase hover:bg-slate-100 transition-colors"
                     >
                       <ListChecks size={14} />
-                      {expandedTimelineId === item.id ? "Hide Timeline" : "Timeline"}
+                      {expandedTimelineId === item.id
+                        ? "Hide Timeline"
+                        : "Timeline"}
                     </button>
                     <button
                       onClick={() => deleteMine(item.id)}
@@ -391,31 +399,42 @@ const MyUploadsPage: React.FC = () => {
                         </p>
                         {timelineLoadingId === item.id ? (
                           <div className="flex py-4">
-                            <Loader2 size={18} className="animate-spin text-[#cc543a]" />
+                            <Loader2
+                              size={18}
+                              className="animate-spin text-[#cc543a]"
+                            />
                           </div>
-                        ) : (timelineById[item.id]?.status_history || []).length === 0 ? (
+                        ) : (timelineById[item.id]?.status_history || [])
+                            .length === 0 ? (
                           <p className="text-sm text-slate-500 py-2">
                             No timeline entries available yet.
                           </p>
                         ) : (
                           <div className="space-y-2 pt-2">
-                            {timelineById[item.id].status_history.map((entry) => (
-                              <div
-                                key={entry.id}
-                                className="border border-black bg-white px-3 py-2 text-xs"
-                              >
-                                <p className="font-black uppercase">
-                                  {entry.from_status ? `${entry.from_status} -> ` : ""}
-                                  {entry.to_status}
-                                </p>
-                                <p className="text-slate-600">
-                                  {entry.reason || "No reason recorded"}
-                                </p>
-                                <p className="text-slate-400 uppercase font-bold">
-                                  {new Date(entry.created_at).toLocaleString()} / {entry.actor_type}
-                                </p>
-                              </div>
-                            ))}
+                            {timelineById[item.id].status_history.map(
+                              (entry) => (
+                                <div
+                                  key={entry.id}
+                                  className="border border-black bg-white px-3 py-2 text-xs"
+                                >
+                                  <p className="font-black uppercase">
+                                    {entry.from_status
+                                      ? `${entry.from_status} -> `
+                                      : ""}
+                                    {entry.to_status}
+                                  </p>
+                                  <p className="text-slate-600">
+                                    {entry.reason || "No reason recorded"}
+                                  </p>
+                                  <p className="text-slate-400 uppercase font-bold">
+                                    {new Date(
+                                      entry.created_at,
+                                    ).toLocaleString()}{" "}
+                                    / {entry.actor_type}
+                                  </p>
+                                </div>
+                              ),
+                            )}
                           </div>
                         )}
                       </div>
@@ -426,26 +445,34 @@ const MyUploadsPage: React.FC = () => {
                         </p>
                         {timelineLoadingId === item.id ? null : (
                           <div className="space-y-2 pt-2">
-                            {(timelineById[item.id]?.metadata_history || []).length === 0 ? (
+                            {(timelineById[item.id]?.metadata_history || [])
+                              .length === 0 ? (
                               <p className="text-sm text-slate-500">
                                 No metadata edits recorded.
                               </p>
                             ) : (
-                              timelineById[item.id].metadata_history.map((entry) => (
-                                <div
-                                  key={entry.id}
-                                  className="border border-black bg-white px-3 py-2 text-xs"
-                                >
-                                  <p className="font-black uppercase">{entry.field_name}</p>
-                                  <p className="text-slate-600 break-all">
-                                    {entry.old_value || "(empty)"} ->{" "}
-                                    {entry.new_value || "(empty)"}
-                                  </p>
-                                  <p className="text-slate-400 uppercase font-bold">
-                                    {new Date(entry.created_at).toLocaleString()}
-                                  </p>
-                                </div>
-                              ))
+                              timelineById[item.id].metadata_history.map(
+                                (entry) => (
+                                  <div
+                                    key={entry.id}
+                                    className="border border-black bg-white px-3 py-2 text-xs"
+                                  >
+                                    <p className="font-black uppercase">
+                                      {entry.field_name}
+                                    </p>
+                                    <p className="text-slate-600 break-all">
+                                      {entry.old_value || "(empty)"}
+                                      {" -> "}
+                                      {entry.new_value || "(empty)"}
+                                    </p>
+                                    <p className="text-slate-400 uppercase font-bold">
+                                      {new Date(
+                                        entry.created_at,
+                                      ).toLocaleString()}
+                                    </p>
+                                  </div>
+                                ),
+                              )
                             )}
                           </div>
                         )}

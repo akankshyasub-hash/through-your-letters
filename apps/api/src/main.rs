@@ -38,6 +38,8 @@ async fn main() -> anyhow::Result<()> {
             config.r2_access_key_id.clone(),
             config.r2_secret_access_key.clone(),
             config.r2_endpoint.clone(),
+            config.r2_region.clone(),
+            config.r2_force_path_style,
             config.r2_bucket_name.clone(),
             config.r2_public_url.clone(),
         )

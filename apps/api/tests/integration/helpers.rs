@@ -20,7 +20,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use serde::de::DeserializeOwned;
-use std::sync::Arc;
+use std::{io::Cursor, sync::Arc};
 use tokio::sync::broadcast;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -30,7 +30,12 @@ struct TestStorage;
 
 #[async_trait]
 impl StorageService for TestStorage {
-    async fn upload(&self, key: &str, _data: Vec<u8>, _content_type: &str) -> anyhow::Result<String> {
+    async fn upload(
+        &self,
+        key: &str,
+        _data: Vec<u8>,
+        _content_type: &str,
+    ) -> anyhow::Result<String> {
         Ok(format!("https://test-storage.local/{}", key))
     }
 
@@ -74,16 +79,17 @@ pub struct TestApp {
     pub admin_password: String,
 }
 
-fn build_config(admin_password_hash: String) -> Config {
+fn build_config(admin_password_hash: String, database_url: String) -> Config {
     Config {
-        database_url: std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://test:test@localhost:5432/through-your-letters-test".to_string()),
+        database_url,
         database_max_connections: 5,
         redis_url: std::env::var("REDIS_URL")
             .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
         r2_access_key_id: "test".to_string(),
         r2_secret_access_key: "test".to_string(),
         r2_endpoint: "https://test.r2.cloudflarestorage.com".to_string(),
+        r2_region: "auto".to_string(),
+        r2_force_path_style: false,
         r2_bucket_name: "test".to_string(),
         r2_public_url: "https://test.r2.dev".to_string(),
         host: "127.0.0.1".to_string(),
@@ -105,11 +111,32 @@ fn build_config(admin_password_hash: String) -> Config {
     }
 }
 
+async fn resolve_database_url() -> String {
+    if let Ok(explicit) = std::env::var("DATABASE_URL") {
+        return explicit;
+    }
+
+    let candidates = [
+        "postgresql://dev:dev@127.0.0.1:5432/through-your-letters",
+        "postgresql://dev:dev@127.0.0.1:55432/through-your-letters",
+        "postgresql://test:test@127.0.0.1:5432/through-your-letters-test",
+    ];
+
+    for candidate in candidates {
+        if create_pool(candidate, 1).await.is_ok() {
+            return candidate.to_string();
+        }
+    }
+
+    candidates[0].to_string()
+}
+
 pub async fn spawn_app() -> TestApp {
     let admin_password = "AdminPassword123!".to_string();
-    let admin_password_hash = bcrypt::hash(&admin_password, bcrypt::DEFAULT_COST)
-        .expect("failed to hash admin password");
-    let config = build_config(admin_password_hash);
+    let admin_password_hash =
+        bcrypt::hash(&admin_password, bcrypt::DEFAULT_COST).expect("failed to hash admin password");
+    let database_url = resolve_database_url().await;
+    let config = build_config(admin_password_hash, database_url);
 
     let db = create_pool(&config.database_url, config.database_max_connections)
         .await
@@ -160,18 +187,60 @@ pub async fn read_text(res: axum::response::Response) -> String {
     String::from_utf8(bytes.to_vec()).expect("invalid utf8")
 }
 
+pub async fn expect_status(
+    res: axum::response::Response,
+    expected: StatusCode,
+) -> axum::response::Response {
+    if res.status() == expected {
+        return res;
+    }
+
+    let actual = res.status();
+    let body = read_text(res).await;
+
+    // Log the error for debugging but use assert! for test failure
+    eprintln!("Status mismatch - expected: {expected}, got: {actual}");
+    eprintln!("Response body: {body}");
+
+    assert_eq!(
+        actual,
+        expected,
+        "HTTP status mismatch. Expected {expected}, got {actual}. Response body: {body}"
+    );
+
+    res
+}
+
 pub fn unique_email(prefix: &str) -> String {
     format!("{}-{}@example.com", prefix, Uuid::now_v7())
 }
 
 pub fn tiny_png_bytes() -> Vec<u8> {
-    vec![
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
-        0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00,
-        0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08,
-        0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D,
-        0xB1, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-    ]
+    let uuid_bytes = *Uuid::now_v7().as_bytes();
+    let raw = vec![
+        uuid_bytes[0],
+        uuid_bytes[1],
+        uuid_bytes[2],
+        255,
+        uuid_bytes[3],
+        uuid_bytes[4],
+        uuid_bytes[5],
+        255,
+        uuid_bytes[6],
+        uuid_bytes[7],
+        uuid_bytes[8],
+        255,
+        uuid_bytes[9],
+        uuid_bytes[10],
+        uuid_bytes[11],
+        255,
+    ];
+    let image = image::RgbaImage::from_raw(2, 2, raw).expect("failed to create image");
+    let mut bytes = Vec::new();
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+        .expect("failed to encode png");
+    bytes
 }
 
 pub fn multipart_upload_body(

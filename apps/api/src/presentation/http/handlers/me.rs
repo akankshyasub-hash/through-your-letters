@@ -26,6 +26,10 @@ fn default_limit() -> i64 {
     20
 }
 
+fn safe_limit_offset(limit: i64, offset: i64) -> (i64, i64) {
+    (limit.clamp(1, 100), offset.max(0))
+}
+
 #[derive(Debug, Serialize, FromRow)]
 pub struct MyUploadItem {
     pub id: Uuid,
@@ -158,9 +162,9 @@ fn normalize_optional_contributor_tag(value: Option<String>) -> Result<Option<St
                     "contributor_tag must be between 2 and 30 characters".to_string(),
                 ));
             }
-            let valid_chars = trimmed.chars().all(|c| {
-                c.is_ascii_alphanumeric() || c == ' ' || c == '_' || c == '-' || c == '.'
-            });
+            let valid_chars = trimmed
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '_' || c == '-' || c == '.');
             if !valid_chars {
                 return Err(AppError::BadRequest(
                     "contributor_tag contains unsupported characters".to_string(),
@@ -177,6 +181,7 @@ pub async fn list_my_letterings(
     Query(params): Query<MyUploadsQuery>,
 ) -> Result<Json<MyUploadsResponse>, AppError> {
     let user_id = parse_user_id(&headers, &state)?;
+    let (safe_limit, safe_offset) = safe_limit_offset(params.limit, params.offset);
     let status = params.status.as_ref().map(|s| s.to_uppercase());
 
     let (items, total) = if let Some(ref status_filter) = status {
@@ -186,13 +191,18 @@ pub async fn list_my_letterings(
         }
 
         let items = sqlx::query_as::<_, MyUploadItem>(
-            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, moderation_reason, moderated_at, moderated_by, created_at, updated_at\
-             FROM letterings WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+            r#"SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description,
+                      status, likes_count, comments_count, report_count, moderation_reason, moderated_at,
+                      moderated_by, created_at, updated_at
+               FROM letterings
+               WHERE user_id = $1 AND status = $2
+               ORDER BY created_at DESC
+               LIMIT $3 OFFSET $4"#,
         )
         .bind(user_id)
         .bind(status_filter)
-        .bind(params.limit)
-        .bind(params.offset)
+        .bind(safe_limit)
+        .bind(safe_offset)
         .fetch_all(&state.db)
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?;
@@ -209,12 +219,17 @@ pub async fn list_my_letterings(
         (items, total)
     } else {
         let items = sqlx::query_as::<_, MyUploadItem>(
-            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, moderation_reason, moderated_at, moderated_by, created_at, updated_at\
-             FROM letterings WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            r#"SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description,
+                      status, likes_count, comments_count, report_count, moderation_reason, moderated_at,
+                      moderated_by, created_at, updated_at
+               FROM letterings
+               WHERE user_id = $1
+               ORDER BY created_at DESC
+               LIMIT $2 OFFSET $3"#,
         )
         .bind(user_id)
-        .bind(params.limit)
-        .bind(params.offset)
+        .bind(safe_limit)
+        .bind(safe_offset)
         .fetch_all(&state.db)
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?;
@@ -232,8 +247,8 @@ pub async fn list_my_letterings(
     Ok(Json(MyUploadsResponse {
         items,
         total,
-        limit: params.limit,
-        offset: params.offset,
+        limit: safe_limit,
+        offset: safe_offset,
     }))
 }
 
@@ -300,6 +315,7 @@ pub async fn update_my_lettering(
         .fetch_one(&state.db)
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?;
+        tracing::info!(user_id = %user_id, lettering_id = %existing.id, "No metadata changes detected");
         return Ok(Json(current));
     }
 
@@ -376,6 +392,15 @@ pub async fn update_my_lettering(
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?;
 
+    tracing::info!(
+        user_id = %user_id,
+        lettering_id = %existing.id,
+        changed_description,
+        changed_contributor,
+        changed_pin,
+        "User updated upload metadata"
+    );
+
     Ok(Json(updated))
 }
 
@@ -396,6 +421,11 @@ pub async fn get_my_lettering_timeline(
     .map_err(|e| AppError::InternalError(e.to_string()))?;
 
     if exists == 0 {
+        tracing::warn!(
+            user_id = %user_id,
+            lettering_id = %id,
+            "Timeline access denied for non-owned upload"
+        );
         return Err(AppError::Forbidden(
             "You can only view your own upload timeline".to_string(),
         ));
@@ -435,13 +465,14 @@ pub async fn list_notifications(
     Query(params): Query<NotificationsQuery>,
 ) -> Result<Json<NotificationsResponse>, AppError> {
     let user_id = parse_user_id(&headers, &state)?;
+    let (safe_limit, safe_offset) = safe_limit_offset(params.limit, params.offset);
 
     let items = sqlx::query_as::<_, NotificationItem>(
         "SELECT id, type, title, body, metadata, is_read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(user_id)
-    .bind(params.limit)
-    .bind(params.offset)
+    .bind(safe_limit)
+    .bind(safe_offset)
     .fetch_all(&state.db)
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?;
@@ -465,8 +496,8 @@ pub async fn list_notifications(
         items,
         total,
         unread,
-        limit: params.limit,
-        offset: params.offset,
+        limit: safe_limit,
+        offset: safe_offset,
     }))
 }
 

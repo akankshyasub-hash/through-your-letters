@@ -56,6 +56,8 @@ jobs:
           R2_ACCESS_KEY_ID=test
           R2_SECRET_ACCESS_KEY=test
           R2_ENDPOINT=https://test.r2.cloudflarestorage.com
+          R2_REGION=auto
+          R2_FORCE_PATH_STYLE=false
           R2_BUCKET_NAME=test
           R2_PUBLIC_URL=https://test.r2.dev
           JWT_SECRET=test-secret-for-ci

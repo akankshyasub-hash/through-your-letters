@@ -8,6 +8,8 @@ pub struct Config {
     pub r2_access_key_id: String,
     pub r2_secret_access_key: String,
     pub r2_endpoint: String,
+    pub r2_region: String,
+    pub r2_force_path_style: bool,
     pub r2_bucket_name: String,
     pub r2_public_url: String,
     pub host: String,
@@ -39,6 +41,10 @@ impl Config {
             r2_access_key_id: std::env::var("R2_ACCESS_KEY_ID")?,
             r2_secret_access_key: std::env::var("R2_SECRET_ACCESS_KEY")?,
             r2_endpoint: std::env::var("R2_ENDPOINT")?,
+            r2_region: std::env::var("R2_REGION").unwrap_or("auto".into()),
+            r2_force_path_style: std::env::var("R2_FORCE_PATH_STYLE")
+                .unwrap_or("false".into())
+                .parse()?,
             r2_bucket_name: std::env::var("R2_BUCKET_NAME")?,
             r2_public_url: std::env::var("R2_PUBLIC_URL")?,
             host: std::env::var("HOST").unwrap_or("0.0.0.0".into()),

@@ -15,6 +15,8 @@ impl R2StorageService {
         key: String,
         secret: String,
         endpoint: String,
+        region: String,
+        force_path_style: bool,
         bucket: String,
         public_url: String,
     ) -> anyhow::Result<Self> {
@@ -23,7 +25,8 @@ impl R2StorageService {
             .behavior_version(BehaviorVersion::latest())
             .credentials_provider(creds)
             .endpoint_url(endpoint)
-            .region(Region::new("auto"))
+            .region(Region::new(region))
+            .force_path_style(force_path_style)
             .build();
         Ok(Self {
             client: Client::from_conf(config),

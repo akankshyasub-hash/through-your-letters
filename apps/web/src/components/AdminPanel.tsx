@@ -602,7 +602,7 @@ const AdminPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </button>
         </div>
 
-        {tab === "queue" && (
+        {(tab === "queue" || tab === "reports") && (
           <div className="space-y-8">
             <div className="space-y-4 bg-slate-50 p-4 border-2 border-black">
               <div className="flex flex-wrap justify-between items-center gap-3">

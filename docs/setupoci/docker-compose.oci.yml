@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:8.4.0-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env.api
+    restart: unless-stopped
+    depends_on:
+      - redis
+    expose:
+      - "3000"
+    networks:
+      - backend
+      - edge
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+
+volumes:
+  redis-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  backend:
+    driver: bridge
+  edge:
+    driver: bridge

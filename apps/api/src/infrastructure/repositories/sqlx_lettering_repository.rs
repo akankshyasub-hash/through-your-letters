@@ -2,6 +2,7 @@ use crate::domain::lettering::{entity::*, errors::DomainError, repository::Lette
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, PgPool, types::ipnetwork::IpNetwork};
+use tracing::{error, info, debug, instrument};
 use uuid::Uuid;
 
 #[derive(FromRow)]
@@ -92,15 +93,17 @@ pub struct SqlxLetteringRepository {
     pub pool: PgPool,
 }
 impl SqlxLetteringRepository {
+    /// Creates a new instance of the repository with the provided database pool.
+    ///
+    /// # Arguments
+    /// * `pool` - PostgreSQL connection pool for database operations
     pub fn new(pool: PgPool) -> Self {
+        info!("Initializing SqlxLetteringRepository with connection pool");
         Self { pool }
     }
 
     fn ts_config_for_locale(locale: Option<&str>) -> &'static str {
-        let normalized = locale
-            .unwrap_or("en")
-            .trim()
-            .to_ascii_lowercase();
+        let normalized = locale.unwrap_or("en").trim().to_ascii_lowercase();
 
         if normalized.starts_with("en") {
             "english"
@@ -109,15 +112,37 @@ impl SqlxLetteringRepository {
         }
     }
 
+    /// Performs locale-aware search across lettering entities.
+    ///
+    /// This method combines full-text search using PostgreSQL's text search capabilities
+    /// with fuzzy matching on contributor tags and descriptions. Results are ranked by
+    /// relevance and filtered by approval status.
+    ///
+    /// # Arguments
+    /// * `query` - Search term or phrase
+    /// * `locale` - Optional locale for language-specific search configuration
+    /// * `limit` - Maximum number of results to return (clamped between 1-100)
+    ///
+    /// # Returns
+    /// Vector of matching lettering entities ordered by relevance
+    ///
+    /// # Errors
+    /// Returns `DomainError::InfrastructureError` for database connectivity issues
+    /// or query execution failures
+    #[instrument(skip(self), fields(query_len = query.len(), limit = limit))]
     pub async fn search_with_locale(
         &self,
         query: &str,
         locale: Option<&str>,
         limit: i64,
     ) -> Result<Vec<Lettering>, DomainError> {
+        debug!("Starting search with query: '{}', locale: {:?}", query, locale);
+
         let ts_config = Self::ts_config_for_locale(locale);
         let like = format!("%{}%", query);
         let safe_limit = limit.clamp(1, 100);
+
+        debug!("Using text search config: {}, safe_limit: {}", ts_config, safe_limit);
 
         let rows = sqlx::query_as::<_, LetteringRow>(
             r#"SELECT id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large,
@@ -148,7 +173,13 @@ impl SqlxLetteringRepository {
         .bind(safe_limit)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        .map_err(|e| {
+            error!("Search query failed: {}", e);
+            DomainError::InfrastructureError(format!("Search operation failed: {}", e))
+        })?;
+
+        let result_count = rows.len();
+        debug!("Search completed successfully, found {} results", result_count);
 
         Ok(rows.into_iter().map(Lettering::from).collect())
     }
@@ -156,24 +187,65 @@ impl SqlxLetteringRepository {
 
 #[async_trait]
 impl LetteringRepository for SqlxLetteringRepository {
+    /// Creates a new lettering entity in the database.
+    ///
+    /// This method inserts a lettering with all associated metadata including
+    /// location data, thumbnails, and ML-detected attributes. The entity
+    /// is initially set to PENDING status for moderation review.
+    ///
+    /// # Arguments
+    /// * `l` - Lettering entity to persist
+    ///
+    /// # Returns
+    /// The created lettering entity with database-assigned fields
+    ///
+    /// # Errors
+    /// Returns `DomainError::InfrastructureError` for database constraint violations
+    /// or connectivity issues
+    #[instrument(skip(self, l), fields(lettering_id = %l.id, contributor = %l.contributor_tag))]
     async fn create(&self, l: &Lettering) -> Result<Lettering, DomainError> {
         let pt = format!(
             "POINT({} {})",
             l.location.coordinates[0], l.location.coordinates[1]
         );
+
+        debug!("Creating lettering with location: {}", pt);
+
         sqlx::query!(
             r#"INSERT INTO letterings (id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large, location, pin_code, status, uploaded_by_ip, image_hash, description)
                VALUES ($1, $2, $3, $4, $5, $6, $7, ST_GeogFromText($8), $9, $10, $11, $12, $13)"#,
             l.id, l.city_id, l.contributor_tag, l.image_url, l.thumbnail_urls.small, l.thumbnail_urls.medium, l.thumbnail_urls.large, pt, l.pin_code, "PENDING", l.uploaded_by_ip as _, l.image_hash, l.description
-        ).execute(&self.pool).await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        ).execute(&self.pool).await.map_err(|e| {
+            error!("Failed to create lettering {}: {}", l.id, e);
+            DomainError::InfrastructureError(format!("Failed to create lettering: {}", e))
+        })?;
+
+        info!("Successfully created lettering {} by {}", l.id, l.contributor_tag);
         Ok(l.clone())
     }
 
+    /// Retrieves all approved letterings with pagination support.
+    ///
+    /// This method fetches letterings that have passed moderation review,
+    /// ordered by creation date (newest first).
+    ///
+    /// # Arguments
+    /// * `limit` - Maximum number of letterings to return
+    /// * `offset` - Number of letterings to skip (for pagination)
+    ///
+    /// # Returns
+    /// Vector of approved lettering entities
+    #[instrument(skip(self))]
     async fn find_all(&self, limit: i64, offset: i64) -> Result<Vec<Lettering>, DomainError> {
         let rows = sqlx::query_as!(LetteringRow,
             r#"SELECT id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large, pin_code, status, created_at, updated_at, likes_count, comments_count, detected_text, description, image_hash, report_count, report_reasons, cultural_context, ml_style, ml_script, ml_confidence, ml_color_palette, ST_AsText(location) as "location_wkt!", uploaded_by_ip as "uploaded_by_ip: _" FROM letterings WHERE status = 'APPROVED' ORDER BY created_at DESC LIMIT $1 OFFSET $2"#,
             limit, offset
-        ).fetch_all(&self.pool).await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        ).fetch_all(&self.pool).await.map_err(|e| {
+            error!("Failed to fetch letterings with limit {} offset {}: {}", limit, offset, e);
+            DomainError::InfrastructureError(format!("Failed to retrieve letterings: {}", e))
+        })?;
+
+        debug!("Retrieved {} letterings", rows.len());
         Ok(rows.into_iter().map(Lettering::from).collect())
     }
 
@@ -238,14 +310,121 @@ impl LetteringRepository for SqlxLetteringRepository {
         Ok(rows.into_iter().map(Lettering::from).collect())
     }
 
-    async fn update(&self, _l: &Lettering) -> Result<Lettering, DomainError> {
-        Err(DomainError::InfrastructureError("Unimplemented".into()))
+    async fn update(&self, l: &Lettering) -> Result<Lettering, DomainError> {
+        if l.location.coordinates.len() < 2 {
+            return Err(DomainError::ValidationError(
+                "location must include longitude and latitude".into(),
+            ));
+        }
+
+        let point = format!(
+            "POINT({} {})",
+            l.location.coordinates[0], l.location.coordinates[1]
+        );
+        let status = match l.status {
+            LetteringStatus::Pending => "PENDING",
+            LetteringStatus::Approved => "APPROVED",
+            LetteringStatus::Rejected => "REJECTED",
+            LetteringStatus::Reported => "REPORTED",
+        };
+        let report_reasons = serde_json::to_value(&l.report_reasons)
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        let color_palette_json = l
+            .ml_metadata
+            .as_ref()
+            .and_then(|m| m.color_palette.clone())
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+        let row = sqlx::query_as::<_, LetteringRow>(
+            r#"UPDATE letterings
+               SET city_id = $2,
+                   contributor_tag = $3,
+                   image_url = $4,
+                   thumbnail_small = $5,
+                   thumbnail_medium = $6,
+                   thumbnail_large = $7,
+                   location = ST_GeogFromText($8),
+                   pin_code = $9,
+                   detected_text = $10,
+                   description = $11,
+                   image_hash = $12,
+                   status = $13,
+                   ml_style = $14,
+                   ml_script = $15,
+                   ml_confidence = $16,
+                   ml_color_palette = COALESCE($17, '[]'::jsonb),
+                   cultural_context = $18,
+                   report_count = $19,
+                   report_reasons = $20,
+                   likes_count = $21,
+                   comments_count = $22,
+                   uploaded_by_ip = $23,
+                   updated_at = NOW()
+               WHERE id = $1
+               RETURNING id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large,
+                         pin_code, status, created_at, updated_at, likes_count, comments_count,
+                         detected_text, description, image_hash, report_count, report_reasons, cultural_context,
+                         ml_style, ml_script, ml_confidence, ml_color_palette,
+                         ST_AsText(location) AS location_wkt, uploaded_by_ip"#,
+        )
+        .bind(l.id)
+        .bind(l.city_id)
+        .bind(&l.contributor_tag)
+        .bind(&l.image_url)
+        .bind(&l.thumbnail_urls.small)
+        .bind(&l.thumbnail_urls.medium)
+        .bind(&l.thumbnail_urls.large)
+        .bind(point)
+        .bind(&l.pin_code)
+        .bind(&l.detected_text)
+        .bind(&l.description)
+        .bind(&l.image_hash)
+        .bind(status)
+        .bind(l.ml_metadata.as_ref().and_then(|m| m.style.as_deref()))
+        .bind(l.ml_metadata.as_ref().and_then(|m| m.script.as_deref()))
+        .bind(l.ml_metadata.as_ref().and_then(|m| m.confidence))
+        .bind(color_palette_json)
+        .bind(&l.cultural_context)
+        .bind(l.report_count)
+        .bind(report_reasons)
+        .bind(l.likes_count)
+        .bind(l.comments_count)
+        .bind(l.uploaded_by_ip.clone())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+        let updated = row.ok_or_else(|| DomainError::NotFound("Lettering not found".into()))?;
+        Ok(updated.into())
     }
+    /// Permanently deletes a lettering entity from the database.
+    ///
+    /// This operation is irreversible and will cascade to related entities
+    /// such as comments and likes. Use with caution.
+    ///
+    /// # Arguments
+    /// * `id` - UUID of the lettering to delete
+    ///
+    /// # Errors
+    /// Returns `DomainError::InfrastructureError` if the deletion fails
+    #[instrument(skip(self), fields(lettering_id = %id))]
     async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
-        sqlx::query!("DELETE FROM letterings WHERE id = $1", id)
+        let result = sqlx::query!("DELETE FROM letterings WHERE id = $1", id)
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to delete lettering {}: {}", id, e);
+                DomainError::InfrastructureError(format!("Failed to delete lettering: {}", e))
+            })?;
+
+        if result.rows_affected() == 0 {
+            debug!("No lettering found with id {} for deletion", id);
+        } else {
+            info!("Successfully deleted lettering {}", id);
+        }
+
         Ok(())
     }
 }
