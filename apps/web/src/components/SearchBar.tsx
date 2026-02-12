@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, X, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
+import { useLocaleStore } from "../store/useLocaleStore";
 
 interface SearchBarProps {
   onResults: (results: any[]) => void;
@@ -12,6 +13,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onResults, onClear }) => {
   const [loading, setLoading] = useState(false);
   const [resultCount, setResultCount] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { locale, t } = useLocaleStore();
 
   useEffect(() => {
     // Clear existing timer
@@ -27,7 +29,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onResults, onClear }) => {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const results = await api.search(query.trim());
+        const results = await api.search(query.trim(), locale);
         setResultCount(results.length);
         onResults(results);
       } catch (error) {
@@ -42,7 +44,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onResults, onClear }) => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, locale, onClear, onResults]);
 
   const handleClear = () => {
     setQuery("");
@@ -64,7 +66,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onResults, onClear }) => {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search tags, scripts, neighborhoods..."
+          placeholder={t("search_placeholder")}
           className="flex-1 p-4 font-black text-sm md:text-base outline-none bg-transparent placeholder:text-slate-300"
         />
         {query && (
@@ -78,12 +80,12 @@ const SearchBar: React.FC<SearchBarProps> = ({ onResults, onClear }) => {
         {resultCount !== null && (
           <div className="pr-4 hidden md:block">
             <span className="bg-black text-white text-[9px] font-black uppercase px-2 py-1 tracking-widest">
-              {resultCount} Result{resultCount !== 1 ? 's' : ''}
+              {resultCount} Result{resultCount !== 1 ? "s" : ""}
             </span>
           </div>
         )}
       </div>
-      
+
       {/* Mobile result count badge */}
       {resultCount !== null && (
         <div className="md:hidden mt-2">

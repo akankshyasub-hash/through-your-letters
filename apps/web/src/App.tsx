@@ -2,15 +2,17 @@ import React, { useEffect } from "react";
 import {
   Routes,
   Route,
-  Navigate,
   useLocation,
   NavLink,
+  useNavigate,
 } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { syncOfflineUploads } from "./lib/offlineQueue";
 import Header from "./components/Header";
 import ToastContainer from "./components/ui/ToastContainer";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { useToastStore } from "./store/useToastStore";
+import { useAuthStore } from "./store/useAuthStore";
 import {
   Compass,
   PlusCircle,
@@ -24,6 +26,9 @@ import ExplorePage from "./pages/ExplorePage";
 import AboutPage from "./pages/AboutPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import LetteringDetailPage from "./pages/LetteringDetailPage";
+import AuthPage from "./pages/AuthPage";
+import MyUploadsPage from "./pages/MyUploadsPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import ContributionPanel from "./components/ContributionPanel";
 import MapSection from "./components/MapSection";
 import AdminPanel from "./components/AdminPanel";
@@ -41,6 +46,9 @@ function ScrollToTop() {
 
 const App: React.FC = () => {
   const { addToast } = useToastStore();
+  const { hydrated, hydrate } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Sync offline uploads when connectivity returns
   useEffect(() => {
@@ -57,6 +65,17 @@ const App: React.FC = () => {
     return () => window.removeEventListener("online", handleOnline);
   }, [addToast]);
 
+  useEffect(() => {
+    if (!hydrated) hydrate();
+  }, [hydrated, hydrate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.has("admin")) {
+      navigate("/admin", { replace: true });
+    }
+  }, [location.search, navigate]);
+
   return (
     <div className="min-h-screen flex flex-col max-w-6xl mx-auto bg-white/40 shadow-2xl relative border-x-4 border-black zine-texture">
       <div className="grain-overlay"></div>
@@ -68,30 +87,24 @@ const App: React.FC = () => {
         <ErrorBoundary>
           <Routes>
             <Route path="/" element={<ExplorePage />} />
-            <Route
-              path="/contribute"
-              element={
-                <ContributionPanel
-                  onCancel={() => window.history.back()}
-                  onSubmit={() => {
-                    window.location.href = "/";
-                  }}
-                />
-              }
-            />
+            <Route path="/contribute" element={<ContributeRoute />} />
             <Route path="/map" element={<MapSection />} />
             <Route path="/community" element={<CommunityPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/me/uploads" element={<MyUploadsPage />} />
+            <Route path="/me/notifications" element={<NotificationsPage />} />
             <Route
               path="/admin"
               element={<AdminPanel onClose={() => window.history.back()} />}
             />
             <Route
               path="/contributor/:tag"
-              element={<ContributorProfileWrapper />}
+              element={
+                <ContributorProfile onBack={() => window.history.back()} />
+              }
             />
             <Route path="/lettering/:id" element={<LetteringDetailPage />} />
-            {/* Backward compat: ?admin redirects */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </ErrorBoundary>
@@ -101,11 +114,6 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-// Wrapper to adapt ContributorProfile to router
-function ContributorProfileWrapper() {
-  return <ContributorProfile onBack={() => window.history.back()} />;
-}
 
 function BottomNav() {
   const navItems = [
@@ -134,6 +142,22 @@ function BottomNav() {
         </NavLink>
       ))}
     </nav>
+  );
+}
+
+function ContributeRoute() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  return (
+    <ContributionPanel
+      onCancel={() => navigate(-1)}
+      onSubmit={async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ["letterings-infinite"],
+        });
+        navigate("/");
+      }}
+    />
   );
 }
 

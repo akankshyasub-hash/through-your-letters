@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { useInfiniteGallery } from "../hooks/useLetteringGallery";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCityStore } from "../store/useCityStore";
+import { useToastStore } from "../store/useToastStore";
 import ZinePage from "../components/ZinePage";
 import SearchBar from "../components/SearchBar";
 import FilterBar from "../components/FilterBar";
@@ -33,18 +34,22 @@ export const mapLetteringToZinePage = (item: Lettering): ZinePageData => ({
   likes_count: item.likes_count || 0,
   comments_count: item.comments_count || 0,
   ml_script: item.ml_metadata?.script,
+  is_owner: item.is_owner,
 });
 
 const ExplorePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { selectedCityId } = useCityStore();
+  const { addToast } = useToastStore();
 
   const script = searchParams.get("script") || undefined;
   const style = searchParams.get("style") || undefined;
   const sortBy = searchParams.get("sort") || undefined;
 
-  const [searchResults, setSearchResults] = useState<ZinePageData[] | null>(null);
+  const [searchResults, setSearchResults] = useState<ZinePageData[] | null>(
+    null,
+  );
   const [lightbox, setLightbox] = useState<{
     imageUrl: string;
     title: string;
@@ -52,14 +57,8 @@ const ExplorePage: React.FC = () => {
   } | null>(null);
   const [liveLetterings, setLiveLetterings] = useState<ZinePageData[]>([]);
 
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    refetch,
-  } = useInfiniteGallery(selectedCityId, script, style, sortBy);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
+    useInfiniteGallery(selectedCityId, script, style, sortBy);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -108,6 +107,22 @@ const ExplorePage: React.FC = () => {
         .catch(() => {});
     }, []),
   );
+
+  const handleDelete = async (id: string | number) => {
+    if (!window.confirm("Delete this upload permanently?")) return;
+    try {
+      await api.deleteOwnLettering(id);
+      setLiveLetterings((prev) =>
+        prev.filter((p) => String(p.id) !== String(id)),
+      );
+      setSearchResults((prev) =>
+        prev ? prev.filter((p) => String(p.id) !== String(id)) : prev,
+      );
+      addToast("Upload deleted", "success");
+    } catch {
+      addToast("Delete failed", "error");
+    }
+  };
 
   return (
     <>
@@ -206,6 +221,7 @@ const ExplorePage: React.FC = () => {
               <ZinePage
                 key={page.id}
                 page={page}
+                onDelete={handleDelete}
                 onImageClick={() =>
                   setLightbox({
                     imageUrl: page.image,
@@ -224,10 +240,7 @@ const ExplorePage: React.FC = () => {
           {!searchResults && (
             <div ref={sentinelRef} className="flex justify-center py-8">
               {isFetchingNextPage && (
-                <Loader2
-                  size={24}
-                  className="animate-spin text-[#cc543a]"
-                />
+                <Loader2 size={24} className="animate-spin text-[#cc543a]" />
               )}
               {!hasNextPage && allLetterings.length > 0 && (
                 <p className="text-[10px] font-black uppercase text-slate-300 tracking-widest">

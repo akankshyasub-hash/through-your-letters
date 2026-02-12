@@ -15,6 +15,7 @@ import {
   Download,
 } from "lucide-react";
 import { useToastStore } from "../store/useToastStore";
+import { useAuthStore } from "../store/useAuthStore";
 import { API_BASE_URL } from "../constants";
 import { api } from "../lib/api";
 import BeforeAfterSlider from "./BeforeAfterSlider";
@@ -26,6 +27,7 @@ const ZinePage: React.FC<{
   onContributorClick?: () => void;
 }> = ({ page, onDelete, onImageClick, onContributorClick }) => {
   const { addToast } = useToastStore();
+  const { user, hydrated, hydrate } = useAuthStore();
 
   // Like state
   const [liked, setLiked] = useState(false);
@@ -99,16 +101,9 @@ const ZinePage: React.FC<{
   const handleReport = () => {
     const reason = window.prompt("Why are you reporting this image?");
     if (!reason) return;
-
-    fetch(`${API_BASE_URL}/api/v1/letterings/${page.id}/report`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
-    })
-      .then((res) => {
-        if (res.ok) addToast("Report submitted for review", "success");
-        else throw new Error();
-      })
+    api
+      .reportLettering(page.id, reason)
+      .then(() => addToast("Report submitted for review", "success"))
       .catch(() => addToast("Failed to submit report", "error"));
   };
 
@@ -116,15 +111,9 @@ const ZinePage: React.FC<{
     if (likeLoading) return;
     setLikeLoading(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/letterings/${page.id}/like`,
-        { method: "POST" },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setLiked(data.liked);
-        setLikesCount(data.likes_count);
-      }
+      const data = await api.toggleLike(page.id);
+      setLiked(data.liked);
+      setLikesCount(data.likes_count);
     } catch {
       addToast("Failed to toggle like", "error");
     } finally {
@@ -135,13 +124,9 @@ const ZinePage: React.FC<{
   const fetchComments = async () => {
     setCommentsLoading(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/letterings/${page.id}/comments`,
-      );
-      if (res.ok) {
-        setComments(await res.json());
-        setCommentsLoaded(true);
-      }
+      const data = await api.getComments(page.id);
+      setComments(data);
+      setCommentsLoaded(true);
     } catch {
       addToast("Failed to load comments", "error");
     } finally {
@@ -158,24 +143,20 @@ const ZinePage: React.FC<{
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      addToast("Sign in to post comments", "warning");
+      return;
+    }
     if (!newComment.trim()) return;
     setCommentSubmitting(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/letterings/${page.id}/comments`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: newComment.trim() }),
-        },
-      );
-      if (res.ok) {
-        const comment = await res.json();
+      const comment = await api.addComment(page.id, newComment.trim());
+      if (comment.status === "VISIBLE" || !comment.status) {
         setComments((prev) => [comment, ...prev]);
-        setNewComment("");
       } else {
-        addToast("Failed to add comment", "error");
+        addToast("Comment submitted and held for moderator review.", "info");
       }
+      setNewComment("");
     } catch {
       addToast("Failed to add comment", "error");
     } finally {
@@ -184,6 +165,12 @@ const ZinePage: React.FC<{
   };
 
   const narrative = page.description || page.culturalContext;
+
+  useEffect(() => {
+    if (!hydrated) {
+      hydrate();
+    }
+  }, [hydrated, hydrate]);
 
   useEffect(() => {
     let active = true;
@@ -202,8 +189,8 @@ const ZinePage: React.FC<{
 
   useEffect(() => {
     let active = true;
-    fetch(`${API_BASE_URL}/api/v1/letterings/${page.id}/similar`)
-      .then((res) => (res.ok ? res.json() : Promise.resolve({ similar: [] })))
+    api
+      .getSimilar(page.id)
       .then((data) => {
         if (active) setSimilar(data.similar || []);
       })
@@ -302,7 +289,7 @@ const ZinePage: React.FC<{
             >
               <AlertTriangle size={16} />
             </button>
-            {onDelete && (
+            {onDelete && page.is_owner && (
               <button
                 onClick={() => onDelete(page.id)}
                 className="p-2 border-2 border-black bg-white hover:bg-red-600 hover:text-white text-red-600"
@@ -372,13 +359,14 @@ const ZinePage: React.FC<{
                 type="text"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
+                placeholder={user ? "Add a comment..." : "Sign in to comment"}
                 className="flex-1 border-2 border-black p-3 text-sm font-medium outline-none focus:border-[#cc543a]"
-                disabled={commentSubmitting}
+                disabled={commentSubmitting || !user}
+                maxLength={500}
               />
               <button
                 type="submit"
-                disabled={commentSubmitting || !newComment.trim()}
+                disabled={commentSubmitting || !newComment.trim() || !user}
                 className="p-3 bg-black text-white border-2 border-black hover:bg-[#cc543a] transition-colors disabled:opacity-50"
               >
                 {commentSubmitting ? (
@@ -388,6 +376,11 @@ const ZinePage: React.FC<{
                 )}
               </button>
             </form>
+            {!user && (
+              <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                Sign in from the account page to comment.
+              </p>
+            )}
 
             {/* Comments list */}
             <div className="px-4 pb-4 space-y-3 max-h-64 overflow-y-auto">
@@ -405,6 +398,9 @@ const ZinePage: React.FC<{
                     key={comment.id}
                     className="border-l-2 border-black/10 pl-3 space-y-1"
                   >
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#cc543a]">
+                      {comment.commenter_name || "Anonymous"}
+                    </p>
                     <p className="text-sm font-medium text-slate-900">
                       {comment.content}
                     </p>

@@ -33,6 +33,10 @@ pub fn create_router(state: AppState) -> Router {
             post(admin::clear_reports),
         )
         .route(
+            "/api/v1/admin/letterings/bulk",
+            post(admin::bulk_lettering_action),
+        )
+        .route(
             "/api/v1/admin/cities/discover",
             post(admin_cities::discover_cities),
         )
@@ -50,6 +54,10 @@ pub fn create_router(state: AppState) -> Router {
             post(admin_comments::restore_comment),
         )
         .route(
+            "/api/v1/admin/comments/bulk",
+            post(admin_comments::bulk_comment_action),
+        )
+        .route(
             "/api/v1/admin/comments/{id}",
             delete(admin_comments::delete_comment),
         )
@@ -61,6 +69,7 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/admin/region-policies/{country_code}",
             put(admin_region_policies::upsert_region_policy),
         )
+        .route("/api/v1/admin/audit-logs", get(admin::list_audit_logs))
         .route("/api/v1/admin/stats", get(admin::get_stats))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
@@ -141,6 +150,10 @@ pub fn create_router(state: AppState) -> Router {
         // User workspace
         .route("/api/v1/me/letterings", get(me::list_my_letterings))
         .route("/api/v1/me/letterings/{id}", patch(me::update_my_lettering))
+        .route(
+            "/api/v1/me/letterings/{id}/timeline",
+            get(me::get_my_lettering_timeline),
+        )
         .route("/api/v1/me/notifications", get(me::list_notifications))
         .route(
             "/api/v1/me/notifications/{id}/read",

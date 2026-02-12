@@ -39,6 +39,9 @@ pub struct MyUploadItem {
     pub likes_count: i32,
     pub comments_count: i32,
     pub report_count: i32,
+    pub moderation_reason: Option<String>,
+    pub moderated_at: Option<DateTime<Utc>>,
+    pub moderated_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -56,6 +59,40 @@ pub struct UpdateMyUploadRequest {
     pub description: Option<String>,
     pub contributor_tag: Option<String>,
     pub pin_code: Option<String>,
+}
+
+#[derive(Debug, FromRow)]
+struct MyUploadEditableRow {
+    id: Uuid,
+    description: Option<String>,
+    contributor_tag: String,
+    pin_code: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct MyUploadStatusHistoryItem {
+    pub id: Uuid,
+    pub from_status: Option<String>,
+    pub to_status: String,
+    pub reason: Option<String>,
+    pub actor_type: String,
+    pub actor_sub: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct MyUploadMetadataHistoryItem {
+    pub id: Uuid,
+    pub field_name: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MyUploadTimelineResponse {
+    pub status_history: Vec<MyUploadStatusHistoryItem>,
+    pub metadata_history: Vec<MyUploadMetadataHistoryItem>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -92,6 +129,48 @@ fn parse_user_id(headers: &HeaderMap, state: &AppState) -> Result<Uuid, AppError
         .map_err(|_| AppError::Forbidden("Invalid token subject".to_string()))
 }
 
+fn normalize_optional_description(value: Option<String>) -> Result<Option<String>, AppError> {
+    match value {
+        None => Ok(None),
+        Some(v) => {
+            let trimmed = v.trim().to_string();
+            if trimmed.is_empty() {
+                return Ok(Some(String::new()));
+            }
+            if trimmed.chars().count() > 1200 {
+                return Err(AppError::BadRequest(
+                    "description must be 1200 characters or less".to_string(),
+                ));
+            }
+            Ok(Some(trimmed))
+        }
+    }
+}
+
+fn normalize_optional_contributor_tag(value: Option<String>) -> Result<Option<String>, AppError> {
+    match value {
+        None => Ok(None),
+        Some(v) => {
+            let trimmed = v.trim().to_string();
+            let len = trimmed.chars().count();
+            if len < 2 || len > 30 {
+                return Err(AppError::BadRequest(
+                    "contributor_tag must be between 2 and 30 characters".to_string(),
+                ));
+            }
+            let valid_chars = trimmed.chars().all(|c| {
+                c.is_ascii_alphanumeric() || c == ' ' || c == '_' || c == '-' || c == '.'
+            });
+            if !valid_chars {
+                return Err(AppError::BadRequest(
+                    "contributor_tag contains unsupported characters".to_string(),
+                ));
+            }
+            Ok(Some(trimmed))
+        }
+    }
+}
+
 pub async fn list_my_letterings(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -107,7 +186,7 @@ pub async fn list_my_letterings(
         }
 
         let items = sqlx::query_as::<_, MyUploadItem>(
-            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, created_at, updated_at\
+            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, moderation_reason, moderated_at, moderated_by, created_at, updated_at\
              FROM letterings WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
         )
         .bind(user_id)
@@ -130,7 +209,7 @@ pub async fn list_my_letterings(
         (items, total)
     } else {
         let items = sqlx::query_as::<_, MyUploadItem>(
-            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, created_at, updated_at\
+            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, moderation_reason, moderated_at, moderated_by, created_at, updated_at\
              FROM letterings WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(user_id)
@@ -178,25 +257,11 @@ pub async fn update_my_lettering(
         }
     }
 
-    let contributor_tag = body
-        .contributor_tag
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-
-    let updated = sqlx::query_as::<_, MyUploadItem>(
-        "UPDATE letterings\
-         SET description = COALESCE($1, description),\
-             contributor_tag = COALESCE($2, contributor_tag),\
-             pin_code = COALESCE($3, pin_code),\
-             updated_at = NOW()\
-         WHERE id = $4 AND user_id = $5\
-         RETURNING id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, created_at, updated_at",
+    let existing = sqlx::query_as::<_, MyUploadEditableRow>(
+        "SELECT id, description, contributor_tag, pin_code
+         FROM letterings
+         WHERE id = $1 AND user_id = $2",
     )
-    .bind(body.description)
-    .bind(contributor_tag)
-    .bind(body.pin_code)
     .bind(id)
     .bind(user_id)
     .fetch_optional(&state.db)
@@ -204,7 +269,164 @@ pub async fn update_my_lettering(
     .map_err(|e| AppError::InternalError(e.to_string()))?
     .ok_or_else(|| AppError::Forbidden("You can only update your own uploads".to_string()))?;
 
+    let description_input = normalize_optional_description(body.description)?;
+    let contributor_input = normalize_optional_contributor_tag(body.contributor_tag)?;
+
+    let resolved_description = match description_input {
+        Some(v) => {
+            if v.is_empty() {
+                None
+            } else {
+                Some(v)
+            }
+        }
+        None => existing.description.clone(),
+    };
+    let resolved_contributor = contributor_input.unwrap_or(existing.contributor_tag.clone());
+    let resolved_pin = body.pin_code.unwrap_or(existing.pin_code.clone());
+
+    let changed_description = existing.description != resolved_description;
+    let changed_contributor = existing.contributor_tag != resolved_contributor;
+    let changed_pin = existing.pin_code != resolved_pin;
+
+    if !changed_description && !changed_contributor && !changed_pin {
+        let current = sqlx::query_as::<_, MyUploadItem>(
+            "SELECT id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, moderation_reason, moderated_at, moderated_by, created_at, updated_at
+             FROM letterings
+             WHERE id = $1 AND user_id = $2",
+        )
+        .bind(existing.id)
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+        return Ok(Json(current));
+    }
+
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let updated = sqlx::query_as::<_, MyUploadItem>(
+        "UPDATE letterings
+         SET description = $1,
+             contributor_tag = $2,
+             pin_code = $3,
+             updated_at = NOW()
+         WHERE id = $4 AND user_id = $5
+         RETURNING id, image_url, thumbnail_small, pin_code, contributor_tag, detected_text, description, status, likes_count, comments_count, report_count, moderation_reason, moderated_at, moderated_by, created_at, updated_at",
+    )
+    .bind(&resolved_description)
+    .bind(&resolved_contributor)
+    .bind(&resolved_pin)
+    .bind(existing.id)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    if changed_description {
+        sqlx::query(
+            "INSERT INTO lettering_metadata_history (id, lettering_id, edited_by_user_id, field_name, old_value, new_value)
+             VALUES ($1, $2, $3, 'description', $4, $5)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(existing.id)
+        .bind(user_id)
+        .bind(existing.description)
+        .bind(updated.description.clone())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    }
+
+    if changed_contributor {
+        sqlx::query(
+            "INSERT INTO lettering_metadata_history (id, lettering_id, edited_by_user_id, field_name, old_value, new_value)
+             VALUES ($1, $2, $3, 'contributor_tag', $4, $5)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(existing.id)
+        .bind(user_id)
+        .bind(existing.contributor_tag)
+        .bind(updated.contributor_tag.clone())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    }
+
+    if changed_pin {
+        sqlx::query(
+            "INSERT INTO lettering_metadata_history (id, lettering_id, edited_by_user_id, field_name, old_value, new_value)
+             VALUES ($1, $2, $3, 'pin_code', $4, $5)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(existing.id)
+        .bind(user_id)
+        .bind(existing.pin_code)
+        .bind(updated.pin_code.clone())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    }
+
+    tx.commit()
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
     Ok(Json(updated))
+}
+
+pub async fn get_my_lettering_timeline(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<MyUploadTimelineResponse>, AppError> {
+    let user_id = parse_user_id(&headers, &state)?;
+
+    let exists = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM letterings WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    if exists == 0 {
+        return Err(AppError::Forbidden(
+            "You can only view your own upload timeline".to_string(),
+        ));
+    }
+
+    let status_history = sqlx::query_as::<_, MyUploadStatusHistoryItem>(
+        "SELECT id, from_status, to_status, reason, actor_type, actor_sub, created_at
+         FROM lettering_status_history
+         WHERE lettering_id = $1
+         ORDER BY created_at DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let metadata_history = sqlx::query_as::<_, MyUploadMetadataHistoryItem>(
+        "SELECT id, field_name, old_value, new_value, created_at
+         FROM lettering_metadata_history
+         WHERE lettering_id = $1
+         ORDER BY created_at DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    Ok(Json(MyUploadTimelineResponse {
+        status_history,
+        metadata_history,
+    }))
 }
 
 pub async fn list_notifications(

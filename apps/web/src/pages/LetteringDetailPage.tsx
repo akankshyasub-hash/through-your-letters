@@ -9,6 +9,7 @@ import {
   Share2,
   Download,
   AlertTriangle,
+  Trash2,
   Send,
   Loader2,
   ChevronDown,
@@ -18,6 +19,7 @@ import { api } from "../lib/api";
 import { Lettering, Comment, RevisitLink } from "../types";
 import { API_BASE_URL } from "../constants";
 import { useToastStore } from "../store/useToastStore";
+import { useAuthStore } from "../store/useAuthStore";
 import BeforeAfterSlider from "../components/BeforeAfterSlider";
 import ImageLightbox from "../components/ImageLightbox";
 
@@ -25,6 +27,7 @@ const LetteringDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addToast } = useToastStore();
+  const { user, hydrated, hydrate } = useAuthStore();
 
   const [lettering, setLettering] = useState<Lettering | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +49,12 @@ const LetteringDetailPage: React.FC = () => {
   // Revisits & Similar
   const [revisits, setRevisits] = useState<RevisitLink[]>([]);
   const [similar, setSimilar] = useState<
-    Array<{ id: string; thumbnail?: string; image_url: string; detected_text?: string }>
+    Array<{
+      id: string;
+      thumbnail?: string;
+      image_url: string;
+      detected_text?: string;
+    }>
   >([]);
 
   // Lightbox
@@ -67,9 +75,21 @@ const LetteringDetailPage: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
+    if (!hydrated) {
+      hydrate();
+    }
+  }, [hydrated, hydrate]);
+
+  useEffect(() => {
     if (!id) return;
-    api.getRevisits(id).then((d) => setRevisits(d.revisits || [])).catch(() => {});
-    api.getSimilar(id).then((d) => setSimilar(d.similar || [])).catch(() => {});
+    api
+      .getRevisits(id)
+      .then((d) => setRevisits(d.revisits || []))
+      .catch(() => {});
+    api
+      .getSimilar(id)
+      .then((d) => setSimilar(d.similar || []))
+      .catch(() => {});
   }, [id]);
 
   const handleLike = async () => {
@@ -101,7 +121,8 @@ const LetteringDetailPage: React.FC = () => {
         addToast("Link copied to clipboard", "success");
       }
     } catch (err) {
-      if ((err as Error).name !== "AbortError") addToast("Share failed", "error");
+      if ((err as Error).name !== "AbortError")
+        addToast("Share failed", "error");
     }
   };
 
@@ -114,6 +135,20 @@ const LetteringDetailPage: React.FC = () => {
       addToast("Report submitted for review", "success");
     } catch {
       addToast("Failed to submit report", "error");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (!window.confirm("Delete this upload permanently?")) return;
+    try {
+      await api.deleteOwnLettering(id);
+      addToast("Upload deleted", "success");
+      navigate("/");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete upload";
+      addToast(message, "error");
     }
   };
 
@@ -138,11 +173,19 @@ const LetteringDetailPage: React.FC = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      addToast("Sign in to post comments", "warning");
+      return;
+    }
     if (!id || !newComment.trim()) return;
     setCommentSubmitting(true);
     try {
       const comment = await api.addComment(id, newComment.trim());
-      setComments((prev) => [comment, ...prev]);
+      if (comment.status === "VISIBLE" || !comment.status) {
+        setComments((prev) => [comment, ...prev]);
+      } else {
+        addToast("Comment submitted and held for moderator review.", "info");
+      }
       setNewComment("");
     } catch {
       addToast("Failed to add comment", "error");
@@ -163,7 +206,9 @@ const LetteringDetailPage: React.FC = () => {
     return (
       <div className="text-center py-32 space-y-6">
         <h2 className="text-4xl font-black uppercase">Not Found</h2>
-        <p className="text-slate-500 font-medium">{error || "This lettering doesn't exist."}</p>
+        <p className="text-slate-500 font-medium">
+          {error || "This lettering doesn't exist."}
+        </p>
         <button
           onClick={() => navigate("/")}
           className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 text-[10px] font-black uppercase hover:bg-[#cc543a] transition-colors"
@@ -175,7 +220,10 @@ const LetteringDetailPage: React.FC = () => {
   }
 
   const title = lettering.detected_text || "Street Discovery";
-  const narrative = lettering.description || lettering.cultural_context || "Archived street typography from the city.";
+  const narrative =
+    lettering.description ||
+    lettering.cultural_context ||
+    "Archived street typography from the city.";
 
   return (
     <>
@@ -262,9 +310,14 @@ const LetteringDetailPage: React.FC = () => {
                   className="p-2 border-2 border-black bg-white hover:bg-slate-100 flex items-center gap-1 text-slate-600"
                 >
                   <MessageCircle size={16} />
-                  <span className="text-[10px] font-black">{lettering.comments_count || 0}</span>
+                  <span className="text-[10px] font-black">
+                    {lettering.comments_count || 0}
+                  </span>
                 </button>
-                <button onClick={handleShare} className="p-2 border-2 border-black bg-white hover:bg-slate-100">
+                <button
+                  onClick={handleShare}
+                  className="p-2 border-2 border-black bg-white hover:bg-slate-100"
+                >
                   <Share2 size={16} />
                 </button>
                 <a
@@ -281,6 +334,15 @@ const LetteringDetailPage: React.FC = () => {
                 >
                   <AlertTriangle size={16} />
                 </button>
+                {lettering.is_owner && (
+                  <button
+                    onClick={handleDelete}
+                    className="p-2 border-2 border-black bg-white hover:bg-red-600 hover:text-white text-red-600"
+                    title="Delete your upload"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -301,7 +363,8 @@ const LetteringDetailPage: React.FC = () => {
                 Archival Record
               </div>
               <p className="serif text-lg leading-relaxed text-slate-700 italic">
-                Status: {lettering.status}. Archived: {new Date(lettering.created_at).toLocaleDateString()}
+                Status: {lettering.status}. Archived:{" "}
+                {new Date(lettering.created_at).toLocaleDateString()}
               </p>
             </div>
 
@@ -312,31 +375,50 @@ const LetteringDetailPage: React.FC = () => {
                   onClick={toggleComments}
                   className="w-full flex items-center justify-between p-4 border-b-2 border-black/10 hover:bg-slate-50"
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest">Comments</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">
+                    Comments
+                  </span>
                   <ChevronUp size={16} />
                 </button>
-                <form onSubmit={handleAddComment} className="px-4 flex items-center gap-2">
+                <form
+                  onSubmit={handleAddComment}
+                  className="px-4 flex items-center gap-2"
+                >
                   <input
                     type="text"
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment..."
+                    placeholder={
+                      user ? "Add a comment..." : "Sign in to comment"
+                    }
                     className="flex-1 border-2 border-black p-3 text-sm font-medium outline-none focus:border-[#cc543a]"
-                    disabled={commentSubmitting}
+                    disabled={commentSubmitting || !user}
                     maxLength={500}
                   />
                   <button
                     type="submit"
-                    disabled={commentSubmitting || !newComment.trim()}
+                    disabled={commentSubmitting || !newComment.trim() || !user}
                     className="p-3 bg-black text-white border-2 border-black hover:bg-[#cc543a] transition-colors disabled:opacity-50"
                   >
-                    {commentSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    {commentSubmitting ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Send size={16} />
+                    )}
                   </button>
                 </form>
+                {!user && (
+                  <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    Sign in from the account page to comment.
+                  </p>
+                )}
                 <div className="px-4 pb-4 space-y-3 max-h-64 overflow-y-auto">
                   {commentsLoading ? (
                     <div className="flex justify-center py-4">
-                      <Loader2 size={20} className="animate-spin text-[#cc543a]" />
+                      <Loader2
+                        size={20}
+                        className="animate-spin text-[#cc543a]"
+                      />
                     </div>
                   ) : comments.length === 0 ? (
                     <p className="text-[10px] font-bold uppercase text-slate-400 text-center py-4">
@@ -344,8 +426,16 @@ const LetteringDetailPage: React.FC = () => {
                     </p>
                   ) : (
                     comments.map((comment) => (
-                      <div key={comment.id} className="border-l-2 border-black/10 pl-3 space-y-1">
-                        <p className="text-sm font-medium text-slate-900">{comment.content}</p>
+                      <div
+                        key={comment.id}
+                        className="border-l-2 border-black/10 pl-3 space-y-1"
+                      >
+                        <p className="text-[9px] font-black uppercase tracking-widest text-[#cc543a]">
+                          {comment.commenter_name || "Anonymous"}
+                        </p>
+                        <p className="text-sm font-medium text-slate-900">
+                          {comment.content}
+                        </p>
                         <p className="text-[9px] font-bold text-slate-400 uppercase">
                           {new Date(comment.created_at).toLocaleDateString()}
                         </p>
@@ -383,7 +473,9 @@ const LetteringDetailPage: React.FC = () => {
         {/* Similar */}
         {similar.length > 0 && (
           <div className="space-y-6 border-t-4 border-black pt-12">
-            <h3 className="text-2xl font-black uppercase tracking-tighter">Similar Lettering</h3>
+            <h3 className="text-2xl font-black uppercase tracking-tighter">
+              Similar Lettering
+            </h3>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
               {similar.map((item) => (
                 <Link

@@ -9,7 +9,9 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { Loader2, Navigation, Eye, EyeOff } from "lucide-react";
-import { API_BASE_URL } from "../constants";
+import { Link } from "react-router-dom";
+import { api } from "../lib/api";
+import { useCityStore } from "../store/useCityStore";
 
 // Fix Leaflet default icon path issue with bundlers
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +28,15 @@ interface MapMarker {
   lat: number;
   lng: number;
   thumbnail: string;
+}
+
+interface CoveragePoint {
+  pin_code: string;
+  city_id: string;
+  city_name: string;
+  lat: number;
+  lng: number;
+  count: number;
 }
 
 const smallIcon = new L.Icon({
@@ -47,68 +58,55 @@ function FlyToLocation({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
+const coverageColor = (count: number) => {
+  if (count <= 2) return "#ef4444";
+  if (count <= 5) return "#f97316";
+  if (count <= 10) return "#f59e0b";
+  if (count <= 20) return "#22c55e";
+  return "#16a34a";
+};
+
+const coverageRadius = (count: number) => {
+  if (count <= 2) return 500;
+  if (count <= 5) return 700;
+  if (count <= 10) return 900;
+  if (count <= 20) return 1100;
+  return 1300;
+};
+
 const LeafletMap: React.FC<{
   center?: [number, number];
   zoom?: number;
 }> = ({ center = [12.9716, 77.5946], zoom = 12 }) => {
+  const { selectedCityId } = useCityStore();
   const [markers, setMarkers] = useState<MapMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(
     null,
   );
-  const [showDeserts, setShowDeserts] = useState(false);
-  const [desertData, setDesertData] = useState<
-    { pin_code: string; count: number; lat: number; lng: number }[]
-  >([]);
+  const [showCoverage, setShowCoverage] = useState(false);
+  const [coverageData, setCoverageData] = useState<CoveragePoint[]>([]);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/v1/geo/markers`)
-      .then((r) => {
-        if (!r.ok) throw new Error();
-        return r.json();
-      })
-      .then((data) => {
-        if (Array.isArray(data)) setMarkers(data);
-      })
+    api
+      .getMarkers({ cityId: selectedCityId, limit: 5000 })
+      .then((data) => setMarkers(data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedCityId]);
 
   useEffect(() => {
-    if (showDeserts && desertData.length === 0) {
-      fetch(`${API_BASE_URL}/api/v1/analytics/neighborhoods`)
-        .then((r) => {
-          if (!r.ok) throw new Error();
-          return r.json();
-        })
-        .then((json) => {
-          // Map neighborhoods to approximate coordinates
-          const PIN_COORDS: Record<string, [number, number]> = {
-            "560001": [12.9762, 77.5993],
-            "560003": [13.0035, 77.5647],
-            "560004": [12.9431, 77.5738],
-            "560005": [12.9891, 77.6132],
-            "560008": [12.9822, 77.62],
-            "560011": [12.9308, 77.5838],
-            "560034": [12.9352, 77.6245],
-            "560038": [12.9719, 77.6412],
-            "560066": [12.9698, 77.75],
-            "560102": [12.9116, 77.6389],
-          };
-          const neighborhoods = json.neighborhoods || [];
-          setDesertData(
-            neighborhoods
-              .filter((n: { pin_code: string }) => PIN_COORDS[n.pin_code])
-              .map((n: { pin_code: string; count: number }) => ({
-                ...n,
-                lat: PIN_COORDS[n.pin_code][0],
-                lng: PIN_COORDS[n.pin_code][1],
-              })),
-          );
-        })
+    setCoverageData([]);
+  }, [selectedCityId]);
+
+  useEffect(() => {
+    if (showCoverage && coverageData.length === 0) {
+      api
+        .getCoverage({ cityId: selectedCityId, limit: 5000 })
+        .then((data) => setCoverageData(data))
         .catch(() => {});
     }
-  }, [showDeserts, desertData.length]);
+  }, [showCoverage, coverageData.length, selectedCityId]);
 
   const handleNearMe = () => {
     if (!navigator.geolocation) return;
@@ -120,7 +118,6 @@ const LeafletMap: React.FC<{
 
   return (
     <div className="relative">
-      {/* Controls */}
       <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
         <button
           onClick={handleNearMe}
@@ -130,11 +127,11 @@ const LeafletMap: React.FC<{
           <Navigation size={18} />
         </button>
         <button
-          onClick={() => setShowDeserts(!showDeserts)}
-          className={`bg-white border-2 border-black p-2 hover:bg-black hover:text-white transition-colors shadow-md ${showDeserts ? "bg-[#cc543a] text-white" : ""}`}
+          onClick={() => setShowCoverage(!showCoverage)}
+          className={`bg-white border-2 border-black p-2 hover:bg-black hover:text-white transition-colors shadow-md ${showCoverage ? "bg-[#cc543a] text-white" : ""}`}
           title="Show coverage"
         >
-          {showDeserts ? <EyeOff size={18} /> : <Eye size={18} />}
+          {showCoverage ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
 
@@ -170,48 +167,40 @@ const LeafletMap: React.FC<{
                     alt="Lettering"
                   />
                 )}
-                <a
-                  href={`#page-${m.id}`}
+                <Link
+                  to={`/lettering/${m.id}`}
                   className="text-[10px] font-black uppercase text-[#cc543a] hover:underline"
                 >
                   View in Archive
-                </a>
+                </Link>
               </div>
             </Popup>
           </Marker>
         ))}
 
-        {/* Desert/coverage overlays */}
-        {showDeserts &&
-          desertData.map((d) => (
-            <Circle
-              key={d.pin_code}
-              center={[d.lat, d.lng]}
-              radius={800}
-              pathOptions={{
-                color:
-                  d.count === 0
-                    ? "#ef4444"
-                    : d.count < 5
-                      ? "#f97316"
-                      : "#22c55e",
-                fillColor:
-                  d.count === 0
-                    ? "#ef4444"
-                    : d.count < 5
-                      ? "#f97316"
-                      : "#22c55e",
-                fillOpacity: 0.2,
-                weight: 2,
-              }}
-            >
-              <Popup>
-                <span className="text-[10px] font-black">
-                  PIN {d.pin_code}: {d.count} uploads
-                </span>
-              </Popup>
-            </Circle>
-          ))}
+        {showCoverage &&
+          coverageData.map((point) => {
+            const color = coverageColor(point.count);
+            return (
+              <Circle
+                key={`${point.city_id}-${point.pin_code}`}
+                center={[point.lat, point.lng]}
+                radius={coverageRadius(point.count)}
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: 0.2,
+                  weight: 2,
+                }}
+              >
+                <Popup>
+                  <span className="text-[10px] font-black">
+                    {point.city_name} {point.pin_code}: {point.count} uploads
+                  </span>
+                </Popup>
+              </Circle>
+            );
+          })}
 
         {userLocation && (
           <Circle

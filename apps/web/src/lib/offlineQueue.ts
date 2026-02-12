@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "../constants";
+import { USER_SESSION_KEY } from "./api";
 
 const DB_NAME = "tyl-offline";
 const DB_VERSION = 1;
@@ -85,13 +86,14 @@ export async function syncOfflineUploads(): Promise<number> {
     formData.append("city_id", item.cityId);
 
     try {
+      const token = sessionStorage.getItem(USER_SESSION_KEY);
       const res = await fetch(`${API_BASE_URL}/api/v1/letterings/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
       });
 
       if (res.ok) {
-        // Remove from queue
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, "readwrite");
           tx.objectStore(STORE_NAME).delete(item.id);
@@ -101,7 +103,7 @@ export async function syncOfflineUploads(): Promise<number> {
         synced++;
       }
     } catch {
-      // Network still down or server error — stop trying
+      // Network still down or server error - stop trying.
       break;
     }
   }

@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, User } from "lucide-react";
 import { api } from "../lib/api";
-import { Lettering, ZinePageData } from "../types";
+import { Lettering } from "../types";
 
-const ContributorProfile: React.FC<{
-  tag: string;
-  onBack: () => void;
-  onSelectLettering: (page: ZinePageData) => void;
-  mapLetteringToZinePage: (item: Lettering) => ZinePageData;
-}> = ({ tag, onBack, onSelectLettering, mapLetteringToZinePage }) => {
+const ContributorProfile: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
+  const navigate = useNavigate();
+  const { tag } = useParams<{ tag: string }>();
   const [letterings, setLetterings] = useState<Lettering[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!tag) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     api
       .getContributor(tag)
@@ -21,15 +24,34 @@ const ContributorProfile: React.FC<{
         setLetterings(data.letterings);
         setTotalCount(data.total_count);
       })
-      .catch(() => {})
+      .catch(() => {
+        setLetterings([]);
+        setTotalCount(0);
+      })
       .finally(() => setLoading(false));
   }, [tag]);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    navigate(-1);
+  };
+
+  if (!tag) {
+    return (
+      <div className="text-center py-20 text-slate-500 font-black uppercase">
+        Contributor not found
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-12 pb-24">
       <div className="flex items-center gap-4">
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="p-2 border-2 border-black bg-white hover:bg-black hover:text-white transition-colors"
         >
           <ArrowLeft size={20} />
@@ -61,28 +83,25 @@ const ContributorProfile: React.FC<{
         </p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {letterings.map((item) => {
-            const page = mapLetteringToZinePage(item);
-            return (
-              <button
-                key={item.id}
-                onClick={() => onSelectLettering(page)}
-                className="group bg-white border-2 border-black p-3 brutalist-shadow-sm hover:-translate-y-1 transition-all text-left"
-              >
-                <img
-                  src={item.thumbnail_urls.small || item.image_url}
-                  className="aspect-square w-full object-cover border border-black grayscale group-hover:grayscale-0 transition-all"
-                  alt={item.detected_text || "Lettering"}
-                />
-                <p className="text-[11px] font-black uppercase truncate text-black mt-3">
-                  {item.detected_text || "Street Discovery"}
-                </p>
-                <p className="text-[9px] font-bold text-slate-400 mt-1">
-                  {item.pin_code}
-                </p>
-              </button>
-            );
-          })}
+          {letterings.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => navigate(`/lettering/${item.id}`)}
+              className="group bg-white border-2 border-black p-3 brutalist-shadow-sm hover:-translate-y-1 transition-all text-left"
+            >
+              <img
+                src={item.thumbnail_urls.small || item.image_url}
+                className="aspect-square w-full object-cover border border-black grayscale group-hover:grayscale-0 transition-all"
+                alt={item.detected_text || "Lettering"}
+              />
+              <p className="text-[11px] font-black uppercase truncate text-black mt-3">
+                {item.detected_text || "Street Discovery"}
+              </p>
+              <p className="text-[9px] font-bold text-slate-400 mt-1">
+                {item.pin_code}
+              </p>
+            </button>
+          ))}
         </div>
       )}
     </div>

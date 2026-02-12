@@ -8,18 +8,124 @@ import {
   Comment,
 } from "../types";
 
-const SESSION_KEY = "ttl_admin_token";
+export const ADMIN_SESSION_KEY = "ttl_admin_token";
+export const USER_SESSION_KEY = "ttl_user_token";
 
-function getAuthHeaders(): HeadersInit {
-  const token = sessionStorage.getItem(SESSION_KEY);
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  role: string;
+  created_at: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  metadata: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface AdminCommentItem {
+  id: string;
+  lettering_id: string;
+  content: string;
+  commenter_name?: string | null;
+  commenter_email?: string | null;
+  status: "VISIBLE" | "HIDDEN";
+  moderation_score: number;
+  moderation_flags: string[];
+  auto_flagged: boolean;
+  needs_review: boolean;
+  review_priority: number;
+  moderated_by?: string | null;
+  moderation_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  pin_code: string;
+  contributor_tag: string;
+  lettering_image_url: string;
+  lettering_thumbnail: string;
+}
+
+export interface RegionPolicyItem {
+  country_code: string;
+  uploads_enabled: boolean;
+  comments_enabled: boolean;
+  discoverability_enabled: boolean;
+  auto_moderation_level: "relaxed" | "standard" | "strict";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MyUploadItem {
+  id: string;
+  image_url: string;
+  thumbnail_small: string;
+  pin_code: string;
+  contributor_tag: string;
+  detected_text?: string | null;
+  description?: string | null;
+  status: string;
+  likes_count: number;
+  comments_count: number;
+  report_count: number;
+  moderation_reason?: string | null;
+  moderated_at?: string | null;
+  moderated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MyUploadStatusHistoryItem {
+  id: string;
+  from_status?: string | null;
+  to_status: string;
+  reason?: string | null;
+  actor_type: string;
+  actor_sub?: string | null;
+  created_at: string;
+}
+
+export interface MyUploadMetadataHistoryItem {
+  id: string;
+  field_name: "description" | "contributor_tag" | "pin_code";
+  old_value?: string | null;
+  new_value?: string | null;
+  created_at: string;
+}
+
+export interface MyUploadTimelineResponse {
+  status_history: MyUploadStatusHistoryItem[];
+  metadata_history: MyUploadMetadataHistoryItem[];
+}
+
+export interface AdminAuditLogItem {
+  id: string;
+  admin_sub: string;
+  action: string;
+  lettering_id?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+function getAuthHeaders(storageKey: string): HeadersInit {
+  const token = sessionStorage.getItem(storageKey);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(
+  url: string,
+  init?: RequestInit,
+  authStorageKey?: string,
+): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
-    if (res.status === 401) {
-      sessionStorage.removeItem(SESSION_KEY);
+    if (res.status === 401 && authStorageKey) {
+      sessionStorage.removeItem(authStorageKey);
     }
     const text = await res.text().catch(() => "");
     let message = `HTTP ${res.status}`;
@@ -33,6 +139,8 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(message);
   }
+
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -51,6 +159,18 @@ export interface GalleryResponse {
 }
 
 export const api = {
+  getUserToken() {
+    return sessionStorage.getItem(USER_SESSION_KEY);
+  },
+
+  setUserToken(token: string) {
+    sessionStorage.setItem(USER_SESSION_KEY, token);
+  },
+
+  clearUserToken() {
+    sessionStorage.removeItem(USER_SESSION_KEY);
+  },
+
   // Gallery
   async getGallery(params: GalleryParams = {}): Promise<GalleryResponse> {
     const { limit = 50, offset = 0, cityId, script, style, sortBy } = params;
@@ -66,13 +186,18 @@ export const api = {
 
   // Single lettering
   async getLettering(id: string | number): Promise<Lettering> {
-    return fetchJson<Lettering>(`${API_BASE_URL}/api/v1/letterings/${id}`);
+    return fetchJson<Lettering>(
+      `${API_BASE_URL}/api/v1/letterings/${id}`,
+      { headers: getAuthHeaders(USER_SESSION_KEY) },
+      USER_SESSION_KEY,
+    );
   },
 
-  // Upload
+  // Upload (includes user auth if present)
   async upload(formData: FormData) {
     const res = await fetch(`${API_BASE_URL}/api/v1/letterings/upload`, {
       method: "POST",
+      headers: getAuthHeaders(USER_SESSION_KEY),
       body: formData,
     });
     if (!res.ok) throw new Error(await res.text());
@@ -88,10 +213,28 @@ export const api = {
   },
 
   // Search
-  async search(q: string) {
-    return fetchJson<{ letterings: Lettering[] }>(
-      `${API_BASE_URL}/api/v1/letterings/search?q=${encodeURIComponent(q)}`,
+  async search(q: string, lang?: string): Promise<Lettering[]> {
+    const url = new URL(`${API_BASE_URL}/api/v1/letterings/search`);
+    url.searchParams.set("q", q);
+    if (lang?.trim()) {
+      url.searchParams.set("lang", lang.trim());
+    }
+    const data = await fetchJson<Lettering[] | { letterings: Lettering[] }>(
+      url.toString(),
     );
+    return Array.isArray(data) ? data : data.letterings;
+  },
+
+  async deleteOwnLettering(id: string | number) {
+    await fetchJson<void>(
+      `${API_BASE_URL}/api/v1/letterings/${id}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(USER_SESSION_KEY),
+      },
+      USER_SESSION_KEY,
+    );
+    return true;
   },
 
   // Contributor
@@ -150,14 +293,39 @@ export const api = {
       `${API_BASE_URL}/api/v1/letterings/${id}/comments`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...getAuthHeaders(USER_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ content }),
       },
+      USER_SESSION_KEY,
     );
   },
 
   // Cities
-  async getCities() {
+  async getCities(params?: {
+    q?: string;
+    countryCode?: string;
+    limit?: number;
+    offset?: number;
+    discover?: boolean;
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/cities`);
+    if (params?.q) url.searchParams.set("q", params.q);
+    if (params?.countryCode) {
+      url.searchParams.set("country_code", params.countryCode);
+    }
+    if (params?.limit !== undefined) {
+      url.searchParams.set("limit", String(params.limit));
+    }
+    if (params?.offset !== undefined) {
+      url.searchParams.set("offset", String(params.offset));
+    }
+    if (params?.discover !== undefined) {
+      url.searchParams.set("discover", String(params.discover));
+    }
+
     return fetchJson<
       Array<{
         id: string;
@@ -166,22 +334,59 @@ export const api = {
         center_lat: number | null;
         center_lng: number | null;
         default_zoom: number | null;
+        description?: string | null;
+        cover_image_url?: string | null;
         is_active: boolean | null;
       }>
-    >(`${API_BASE_URL}/api/v1/cities`);
+    >(url.toString());
+  },
+
+  async searchCities(query: string, limit = 30) {
+    return this.getCities({ q: query, limit, discover: true });
   },
 
   // Geo
-  async getMarkers() {
+  async getMarkers(params?: { cityId?: string | null; limit?: number }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/geo/markers`);
+    if (params?.cityId) url.searchParams.set("city_id", params.cityId);
+    if (params?.limit !== undefined) {
+      url.searchParams.set("limit", String(params.limit));
+    }
     return fetchJson<
       Array<{ id: string; lat: number; lng: number; thumbnail: string }>
-    >(`${API_BASE_URL}/api/v1/geo/markers`);
+    >(url.toString());
   },
 
   async getNeighborhoods() {
     return fetchJson<{
       neighborhoods: Array<{ pin_code: string; count: number }>;
     }>(`${API_BASE_URL}/api/v1/analytics/neighborhoods`);
+  },
+
+  async getCoverage(params?: {
+    cityId?: string | null;
+    minCount?: number;
+    limit?: number;
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/geo/coverage`);
+    if (params?.cityId) url.searchParams.set("city_id", params.cityId);
+    if (params?.minCount !== undefined) {
+      url.searchParams.set("min_count", String(params.minCount));
+    }
+    if (params?.limit !== undefined) {
+      url.searchParams.set("limit", String(params.limit));
+    }
+
+    return fetchJson<
+      Array<{
+        pin_code: string;
+        city_id: string;
+        city_name: string;
+        lat: number;
+        lng: number;
+        count: number;
+      }>
+    >(url.toString());
   },
 
   // Community
@@ -211,6 +416,117 @@ export const api = {
     });
   },
 
+  // User auth
+  async registerUser(payload: {
+    email: string;
+    password: string;
+    display_name?: string;
+  }) {
+    const data = await fetchJson<{ token: string; user: AuthUser }>(
+      `${API_BASE_URL}/api/v1/auth/register`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    sessionStorage.setItem(USER_SESSION_KEY, data.token);
+    return data;
+  },
+
+  async loginUser(payload: { email: string; password: string }) {
+    const data = await fetchJson<{ token: string; user: AuthUser }>(
+      `${API_BASE_URL}/api/v1/auth/login`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    sessionStorage.setItem(USER_SESSION_KEY, data.token);
+    return data;
+  },
+
+  async getCurrentUser() {
+    return fetchJson<AuthUser>(
+      `${API_BASE_URL}/api/v1/auth/me`,
+      { headers: getAuthHeaders(USER_SESSION_KEY) },
+      USER_SESSION_KEY,
+    );
+  },
+
+  // Me workspace
+  async getMyUploads(params?: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/me/letterings`);
+    if (params?.limit) url.searchParams.set("limit", String(params.limit));
+    if (params?.offset) url.searchParams.set("offset", String(params.offset));
+    if (params?.status) url.searchParams.set("status", params.status);
+    return fetchJson<{
+      items: MyUploadItem[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(
+      url.toString(),
+      { headers: getAuthHeaders(USER_SESSION_KEY) },
+      USER_SESSION_KEY,
+    );
+  },
+
+  async updateMyUpload(
+    id: string,
+    payload: {
+      description?: string;
+      contributor_tag?: string;
+      pin_code?: string;
+    },
+  ) {
+    return fetchJson<MyUploadItem>(
+      `${API_BASE_URL}/api/v1/me/letterings/${id}`,
+      {
+        method: "PATCH",
+        headers: {
+          ...getAuthHeaders(USER_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+      USER_SESSION_KEY,
+    );
+  },
+
+  async getNotifications(params?: { limit?: number; offset?: number }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/me/notifications`);
+    if (params?.limit) url.searchParams.set("limit", String(params.limit));
+    if (params?.offset) url.searchParams.set("offset", String(params.offset));
+    return fetchJson<{
+      items: NotificationItem[];
+      total: number;
+      unread: number;
+      limit: number;
+      offset: number;
+    }>(
+      url.toString(),
+      { headers: getAuthHeaders(USER_SESSION_KEY) },
+      USER_SESSION_KEY,
+    );
+  },
+
+  async markNotificationRead(id: string) {
+    return fetchJson<void>(
+      `${API_BASE_URL}/api/v1/me/notifications/${id}/read`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(USER_SESSION_KEY),
+      },
+      USER_SESSION_KEY,
+    );
+  },
+
   // Admin
   async adminLogin(email: string, password: string) {
     const data = await fetchJson<{ token: string }>(
@@ -221,46 +537,91 @@ export const api = {
         body: JSON.stringify({ email, password }),
       },
     );
-    sessionStorage.setItem(SESSION_KEY, data.token);
+    sessionStorage.setItem(ADMIN_SESSION_KEY, data.token);
     return data;
   },
 
-  async adminGetQueue(status: string) {
-    return fetchJson<{ items: Lettering[] }>(
-      `${API_BASE_URL}/api/v1/admin/moderation?status=${status}`,
-      { headers: getAuthHeaders() },
+  async adminGetQueue(params: {
+    status: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/admin/moderation`);
+    url.searchParams.set("status", params.status);
+    if (params.limit !== undefined) {
+      url.searchParams.set("limit", String(params.limit));
+    }
+    if (params.offset !== undefined) {
+      url.searchParams.set("offset", String(params.offset));
+    }
+
+    return fetchJson<{ items: Lettering[]; total: number }>(
+      url.toString(),
+      { headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminBulkLetterings(payload: {
+    ids: string[];
+    action: "approve" | "reject" | "delete" | "keep";
+    reason?: string;
+  }) {
+    return fetchJson<{
+      requested: number;
+      processed: number;
+      failed: number;
+      failed_items: Array<{ id: string; error: string }>;
+    }>(
+      `${API_BASE_URL}/api/v1/admin/letterings/bulk`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+      ADMIN_SESSION_KEY,
     );
   },
 
   async adminApprove(id: string) {
-    return fetchJson<{ message: string }>(
+    return fetchJson<void>(
       `${API_BASE_URL}/api/v1/admin/letterings/${id}/approve`,
-      { method: "POST", headers: getAuthHeaders() },
+      { method: "POST", headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
     );
   },
 
   async adminReject(id: string, reason: string) {
-    return fetchJson<{ message: string }>(
+    return fetchJson<void>(
       `${API_BASE_URL}/api/v1/admin/letterings/${id}/reject`,
       {
         method: "POST",
-        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ reason }),
       },
+      ADMIN_SESSION_KEY,
     );
   },
 
   async adminDelete(id: string) {
-    return fetchJson<{ message: string }>(
+    return fetchJson<void>(
       `${API_BASE_URL}/api/v1/admin/letterings/${id}`,
-      { method: "DELETE", headers: getAuthHeaders() },
+      { method: "DELETE", headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
     );
   },
 
   async adminClearReports(id: string) {
-    return fetchJson<{ message: string }>(
+    return fetchJson<void>(
       `${API_BASE_URL}/api/v1/admin/letterings/${id}/clear-reports`,
-      { method: "POST", headers: getAuthHeaders() },
+      { method: "POST", headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
     );
   },
 
@@ -273,6 +634,243 @@ export const api = {
       total_cities: number;
       total_likes: number;
       total_comments: number;
-    }>(`${API_BASE_URL}/api/v1/admin/stats`, { headers: getAuthHeaders() });
+    }>(
+      `${API_BASE_URL}/api/v1/admin/stats`,
+      { headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminDiscoverCities(payload: {
+    query: string;
+    country_code?: string;
+    limit?: number;
+  }) {
+    return fetchJson<{
+      processed: number;
+      upserted: number;
+      failed: number;
+    }>(
+      `${API_BASE_URL}/api/v1/admin/cities/discover`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminBootstrapCapitals(payload?: { limit?: number }) {
+    return fetchJson<{
+      processed: number;
+      upserted: number;
+      failed: number;
+    }>(
+      `${API_BASE_URL}/api/v1/admin/cities/bootstrap-capitals`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload || {}),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminGetComments(params?: {
+    status?: "ALL" | "VISIBLE" | "HIDDEN";
+    limit?: number;
+    offset?: number;
+    q?: string;
+    needs_review?: boolean;
+    min_score?: number;
+    sort?: "priority" | "newest" | "score";
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/admin/comments`);
+    if (params?.status) url.searchParams.set("status", params.status);
+    if (params?.limit !== undefined)
+      url.searchParams.set("limit", String(params.limit));
+    if (params?.offset !== undefined)
+      url.searchParams.set("offset", String(params.offset));
+    if (params?.q) url.searchParams.set("q", params.q);
+    if (params?.needs_review !== undefined) {
+      url.searchParams.set("needs_review", String(params.needs_review));
+    }
+    if (params?.min_score !== undefined) {
+      url.searchParams.set("min_score", String(params.min_score));
+    }
+    if (params?.sort) {
+      url.searchParams.set("sort", params.sort);
+    }
+
+    return fetchJson<{
+      items: AdminCommentItem[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(
+      url.toString(),
+      { headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminHideComment(id: string, reason?: string) {
+    return fetchJson<void>(
+      `${API_BASE_URL}/api/v1/admin/comments/${id}/hide`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminRestoreComment(id: string) {
+    return fetchJson<void>(
+      `${API_BASE_URL}/api/v1/admin/comments/${id}/restore`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(ADMIN_SESSION_KEY),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminDeleteComment(id: string) {
+    return fetchJson<void>(
+      `${API_BASE_URL}/api/v1/admin/comments/${id}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(ADMIN_SESSION_KEY),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminBulkComments(payload: {
+    ids: string[];
+    action: "hide" | "restore" | "delete";
+    reason?: string;
+  }) {
+    return fetchJson<{
+      requested: number;
+      processed: number;
+      failed: number;
+      failed_items: Array<{ id: string; error: string }>;
+    }>(
+      `${API_BASE_URL}/api/v1/admin/comments/bulk`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminGetRegionPolicies(params?: {
+    countryCode?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/admin/region-policies`);
+    if (params?.countryCode) {
+      url.searchParams.set("country_code", params.countryCode.toUpperCase());
+    }
+    if (params?.limit !== undefined) {
+      url.searchParams.set("limit", String(params.limit));
+    }
+    if (params?.offset !== undefined) {
+      url.searchParams.set("offset", String(params.offset));
+    }
+
+    return fetchJson<{
+      items: RegionPolicyItem[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(
+      url.toString(),
+      { headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminUpsertRegionPolicy(
+    countryCode: string,
+    payload: {
+      uploads_enabled?: boolean;
+      comments_enabled?: boolean;
+      discoverability_enabled?: boolean;
+      auto_moderation_level?: "relaxed" | "standard" | "strict";
+    },
+  ) {
+    return fetchJson<RegionPolicyItem>(
+      `${API_BASE_URL}/api/v1/admin/region-policies/${countryCode.toUpperCase()}`,
+      {
+        method: "PUT",
+        headers: {
+          ...getAuthHeaders(ADMIN_SESSION_KEY),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async adminGetAuditLogs(params?: {
+    action?: string;
+    countryCode?: string;
+    letteringId?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const url = new URL(`${API_BASE_URL}/api/v1/admin/audit-logs`);
+    if (params?.action) url.searchParams.set("action", params.action);
+    if (params?.countryCode) {
+      url.searchParams.set("country_code", params.countryCode.toUpperCase());
+    }
+    if (params?.letteringId)
+      url.searchParams.set("lettering_id", params.letteringId);
+    if (params?.limit !== undefined) {
+      url.searchParams.set("limit", String(params.limit));
+    }
+    if (params?.offset !== undefined) {
+      url.searchParams.set("offset", String(params.offset));
+    }
+
+    return fetchJson<{
+      items: AdminAuditLogItem[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(
+      url.toString(),
+      { headers: getAuthHeaders(ADMIN_SESSION_KEY) },
+      ADMIN_SESSION_KEY,
+    );
+  },
+
+  async getMyUploadTimeline(id: string) {
+    return fetchJson<MyUploadTimelineResponse>(
+      `${API_BASE_URL}/api/v1/me/letterings/${id}/timeline`,
+      { headers: getAuthHeaders(USER_SESSION_KEY) },
+      USER_SESSION_KEY,
+    );
   },
 };

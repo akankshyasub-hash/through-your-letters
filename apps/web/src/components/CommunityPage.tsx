@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Trophy, FolderOpen, Target, Loader2, Plus, Heart } from "lucide-react";
-import { API_BASE_URL } from "../constants";
 import { LeaderboardEntry, CollectionSummary, ChallengeData } from "../types";
 import { useToastStore } from "../store/useToastStore";
+import { api } from "../lib/api";
 
 type Tab = "leaderboard" | "collections" | "challenges";
 
@@ -24,28 +24,35 @@ const CommunityPage: React.FC<{
 
   useEffect(() => {
     setLoading(true);
-    const endpoint =
-      tab === "leaderboard"
-        ? `${API_BASE_URL}/api/v1/community/leaderboard`
-        : tab === "collections"
-          ? `${API_BASE_URL}/api/v1/collections`
-          : `${API_BASE_URL}/api/v1/challenges`;
+    if (tab === "leaderboard") {
+      api
+        .getLeaderboard()
+        .then((data) => setLeaderboard(data))
+        .catch(() => {
+          setLeaderboard([]);
+          addToast("Failed to load community data", "error");
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
 
-    fetch(endpoint)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data) => {
-        if (!Array.isArray(data)) throw new Error("Unexpected response");
-        if (tab === "leaderboard") setLeaderboard(data);
-        else if (tab === "collections") setCollections(data);
-        else setChallenges(data);
-      })
+    if (tab === "collections") {
+      api
+        .getCollections()
+        .then((data) => setCollections(data))
+        .catch(() => {
+          setCollections([]);
+          addToast("Failed to load community data", "error");
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
+
+    api
+      .getChallenges()
+      .then((data) => setChallenges(data))
       .catch(() => {
-        if (tab === "leaderboard") setLeaderboard([]);
-        else if (tab === "collections") setCollections([]);
-        else setChallenges([]);
+        setChallenges([]);
         addToast("Failed to load community data", "error");
       })
       .finally(() => setLoading(false));
@@ -55,23 +62,12 @@ const CommunityPage: React.FC<{
     e.preventDefault();
     if (!newCollection.name.trim() || !newCollection.creator_tag.trim()) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/collections`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCollection),
-      });
-      if (res.ok) {
-        addToast("Collection created", "success");
-        setShowCreate(false);
-        setNewCollection({ name: "", description: "", creator_tag: "" });
-        // Refresh
-        const data = await fetch(`${API_BASE_URL}/api/v1/collections`).then(
-          (r) => r.json(),
-        );
-        setCollections(data);
-      } else {
-        throw new Error();
-      }
+      await api.createCollection(newCollection);
+      addToast("Collection created", "success");
+      setShowCreate(false);
+      setNewCollection({ name: "", description: "", creator_tag: "" });
+      const data = await api.getCollections();
+      setCollections(data);
     } catch {
       addToast("Failed to create collection", "error");
     }

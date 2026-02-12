@@ -18,12 +18,24 @@ export interface ZinePageData {
   likes_count?: number;
   comments_count?: number;
   ml_script?: string;
+  is_owner?: boolean;
 }
 
 export interface Comment {
   id: string;
   lettering_id: string;
   content: string;
+  user_id?: string | null;
+  commenter_name?: string | null;
+  status?: "VISIBLE" | "HIDDEN";
+  moderation_score?: number;
+  moderation_flags?: string[];
+  auto_flagged?: boolean;
+  needs_review?: boolean;
+  review_priority?: number;
+  moderated_by?: string | null;
+  moderation_reason?: string | null;
+  updated_at?: string;
   created_at: string;
 }
 
@@ -41,17 +53,6 @@ export interface RevisitLink {
     image_url: string;
     created_at: string;
   };
-}
-
-export enum AppMode {
-  EXPLORE = "EXPLORE",
-  CONTRIBUTE = "CONTRIBUTE",
-  ABOUT = "ABOUT",
-  GUIDEBOOK = "GUIDEBOOK",
-  MAP = "MAP",
-  ADMIN = "ADMIN",
-  CONTRIBUTOR = "CONTRIBUTOR",
-  COMMUNITY = "COMMUNITY",
 }
 
 export interface LeaderboardEntry {
@@ -109,6 +110,7 @@ export interface Lettering {
   comments_count?: number;
   report_count?: number;
   report_reasons?: string[];
+  is_owner?: boolean;
 }
 
 export interface NeighborhoodCount {

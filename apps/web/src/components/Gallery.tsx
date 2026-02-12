@@ -11,7 +11,7 @@ const Gallery: React.FC = () => {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["letterings", limit, offset],
-    queryFn: () => api.getGallery(limit, offset),
+    queryFn: () => api.getGallery({ limit, offset }),
   });
 
   if (isLoading) {

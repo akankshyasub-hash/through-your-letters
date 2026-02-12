@@ -1,8 +1,17 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import CitySelector from "./CitySelector";
+import { useAuthStore } from "../store/useAuthStore";
+import { Locale, useLocaleStore } from "../store/useLocaleStore";
 
 const Header: React.FC = () => {
+  const { user, hydrated, hydrate, logout } = useAuthStore();
+  const { locale, setLocale, t } = useLocaleStore();
+
+  React.useEffect(() => {
+    if (!hydrated) hydrate();
+  }, [hydrated, hydrate]);
+
   return (
     <header className="px-6 md:px-16 pt-12 pb-12 border-b-4 border-black bg-white relative overflow-hidden z-10">
       <div className="absolute top-0 right-0 w-64 h-full bg-[#cc543a]/5 -skew-x-12 transform translate-x-32 -z-10"></div>
@@ -17,6 +26,46 @@ const Header: React.FC = () => {
               Archive
             </div>
             <CitySelector />
+            <select
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as Locale)}
+              className="border-2 border-black bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest outline-none"
+              aria-label="Language"
+            >
+              <option value="en">EN</option>
+              <option value="hi">HI</option>
+            </select>
+            <div className="ml-auto flex items-center gap-2">
+              {user ? (
+                <>
+                  <Link
+                    to="/me/uploads"
+                    className="border-2 border-black px-2 py-1 text-[9px] font-black uppercase hover:bg-black hover:text-white transition-colors"
+                  >
+                    {t("my_uploads")}
+                  </Link>
+                  <Link
+                    to="/me/notifications"
+                    className="border-2 border-black px-2 py-1 text-[9px] font-black uppercase hover:bg-black hover:text-white transition-colors"
+                  >
+                    {t("alerts")}
+                  </Link>
+                  <button
+                    onClick={logout}
+                    className="border-2 border-black px-2 py-1 text-[9px] font-black uppercase text-red-600 hover:bg-red-600 hover:text-white transition-colors"
+                  >
+                    {t("logout")}
+                  </button>
+                </>
+              ) : (
+                <Link
+                  to="/auth"
+                  className="border-2 border-black px-2 py-1 text-[9px] font-black uppercase hover:bg-black hover:text-white transition-colors"
+                >
+                  {t("signin")}
+                </Link>
+              )}
+            </div>
           </div>
 
           <Link to="/" className="block">
@@ -28,8 +77,7 @@ const Header: React.FC = () => {
 
           <div className="mt-8">
             <span className="text-xs font-black uppercase tracking-widest text-slate-400 leading-relaxed max-w-lg block">
-              Explore, browse through, learn, and contribute your collected or
-              photographed street letterings and typefaces.
+              {t("header_tagline")}
             </span>
           </div>
         </div>

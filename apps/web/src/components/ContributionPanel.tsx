@@ -8,10 +8,11 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { API_BASE_URL, AREA_PIN_MAP, PIN_AREA_MAP } from "../constants";
+import { AREA_PIN_MAP, PIN_AREA_MAP } from "../constants";
 import { useToastStore } from "../store/useToastStore";
 import { useCityStore } from "../store/useCityStore";
 import { enqueueUpload } from "../lib/offlineQueue";
+import { api } from "../lib/api";
 
 type FileStatus = "pending" | "uploading" | "done" | "error";
 
@@ -240,39 +241,19 @@ const ContributionPanel: React.FC<{
       );
 
       try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/letterings/upload`, {
-          method: "POST",
-          body: formData,
-        });
-        const parseError = async () => {
-          const text = await res.text().catch(() => "");
-          if (!text) return "";
-          try {
-            const json = JSON.parse(text);
-            return json.error || text;
-          } catch {
-            return text;
-          }
-        };
-        if (res.ok) {
-          setFiles((prev) =>
-            prev.map((f, idx) => (idx === i ? { ...f, status: "done" } : f)),
-          );
-          successCount++;
-        } else {
-          const message =
-            (await parseError()) ||
-            (res.status === 429
-              ? "Rate limited. Try again later."
-              : "Upload failed");
-          if (res.status === 429) rateLimited = true;
-          throw new Error(message);
-        }
+        await api.upload(formData);
+        setFiles((prev) =>
+          prev.map((f, idx) => (idx === i ? { ...f, status: "done" } : f)),
+        );
+        successCount++;
       } catch (err) {
         const message =
           err instanceof Error
             ? err.message
             : "Upload failed. Check image format and fields.";
+        if (message.includes("429") || message.toLowerCase().includes("rate")) {
+          rateLimited = true;
+        }
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i ? { ...f, status: "error", error: message } : f,

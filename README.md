@@ -1,72 +1,77 @@
-# Through The Letters - Bengaluru Street Typography Archive
+# Through Your Letters
 
-**A collaborative archive documenting the disappearing world of street lettering in Indian cities.**
+Through Your Letters is a platform for documenting public lettering and typography across cities.
 
-## 🚀 Quick Start
+It includes:
+- A Rust API (`apps/api`) for upload, moderation, social interactions, geo features, auth, and admin tooling.
+- A React web app (`apps/web`) for discovery, contribution, personal workspace, community, and moderation operations.
 
+## Current Product Status
+- Core platform is implemented and deployable.
+- Major end-to-end flows exist: auth, upload, discovery, map, comments, moderation, ownership controls, and admin operations.
+- Region policy controls are implemented (per-country upload/comment/discoverability toggles and moderation level).
+
+Not fully complete yet:
+- There are still roadmap items for global scale, analytics depth, experimentation, and advanced platform governance.
+- "Production-ready" here means operationally deployable and maintainable, not feature-final.
+
+## Engineering Standards Posture
+
+What is in place:
+- Typed backend and frontend contracts.
+- Separation of concerns across API handlers, repositories, services, and UI layers.
+- Centralized API client in web app.
+- Request traceability (`x-request-id`), admin audit logging, and moderation controls.
+- CI/build quality gates.
+
+What still needs continued improvement:
+- More automated tests (integration/e2e coverage expansion).
+- Larger frontend bundle reduction through route-level code splitting.
+- Additional observability depth and SLO-driven alert tuning.
+
+See `docs/ROADMAP.md` for explicit backlog and priorities.
+
+## Quick Start
 ```bash
-
-# Install dependencies
 pnpm install
+pnpm db:up
 
-# Start local development
-docker-compose up -d postgres redis
-cd apps/api && cargo run &
-cd apps/web && pnpm dev
+# terminal 1
+cd apps/api
+cargo run
+
+# terminal 2
+cd apps/web
+pnpm dev
 ```
 
-## 📚 Documentation
+Backend: `http://localhost:3000`  
+Frontend: `http://localhost:5173`
 
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - 5-minute setup
-- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - **FREE** deployment guide
-- **[docs/R2_SETUP.md](docs/R2_SETUP.md)** - Storage configuration
-- **[docs/ENV_VARIABLES.md](docs/ENV_VARIABLES.md)** - Environment setup
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design
+## Quality Gates
+```bash
+pnpm lint
+pnpm --filter @ttl/web type-check
+pnpm --filter @ttl/web build
+cd apps/api && SQLX_OFFLINE=true cargo check
+```
 
-## 🛠️ Technology Stack
+## Security and Ownership
+- User authentication with JWT.
+- Admin authentication with separate token namespace.
+- Upload deletion is restricted to authenticated owner accounts.
+- Moderation supports automated risk scoring plus admin review controls.
+- Request IDs are attached to responses (`x-request-id`) for traceability.
 
-**Backend:**
-- Rust + Axum (web framework)
-- PostgreSQL + PostGIS (geospatial)
-- Redis (cache + queue)
-- ONNX Runtime (ML)
+## Documentation
+- `docs/SETUP.md` local development setup
+- `docs/ENV_VARIABLES.md` required and optional environment variables
+- `docs/API.md` API contract
+- `docs/ARCHITECTURE.md` system architecture and module boundaries
+- `docs/DEPLOYMENT.md` deployment and operational runbook
+- `docs/PRODUCTION_CHECKLIST.md` release checklist
+- `docs/region-policies-and-i18n.md` region policy and locale-aware search behavior
+- `docs/ROADMAP.md` product roadmap and future implementation plan
 
-**Frontend:**
-- React 18 + TypeScript
-- Vite + Tailwind CSS
-- TanStack Query
-
-**Mobile:**
-- Capacitor (iOS + Android)
-
-## 🌟 Features
-
-- Image upload with ML text detection
-- Gallery with pagination
-- Full-text search
-- Map exploration
-- Social features (likes, comments)
-- Rate limiting
-- Mobile apps (iOS/Android)
-
-## 📊 Free Tier Limits
-
-| Resource | Free Tier |
-|----------|-----------|
-| Backend | 750 hrs/month |
-| Database | 500 MB |
-| Redis | 10k commands/day |
-| Storage | 10 GB |
-| Bandwidth | 100 GB/month |
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE)
-
----
-
-**Built with ❤️ for preserving urban typography**
+## License
+MIT
