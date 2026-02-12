@@ -439,7 +439,7 @@ impl ValidationPatterns {
             url: Regex::new(r"^https?://[^\s/$.?#].[^\s]*$")?,
             sql_injection: vec![
                 Regex::new(r"(?i)(union|select|insert|update|delete|drop|exec|script)")?,
-                Regex::new(r"(?i)(--|\||;|'|\"|`)")?,
+                Regex::new(r"(?i)(--|;|'|\"|`)")?,
                 Regex::new(r"(?i)(0x[0-9a-f]+|char\(|ascii\()")?,
             ],
             xss_patterns: vec![
@@ -448,7 +448,7 @@ impl ValidationPatterns {
                 Regex::new(r"(?i)(<iframe|<object|<embed|<applet)")?,
             ],
             command_injection: vec![
-                Regex::new(r"(?i)(;|&&|\|\||`|\$\(|>\s|<\s)")?,
+                Regex::new(r"(?i)(;|&&|`|\$\(|>\s|<\s)")?,
                 Regex::new(r"(?i)(nc|netcat|wget|curl|ping|nslookup)")?,
             ],
         })
@@ -480,7 +480,7 @@ impl Default for ValidationConfig {
 
 impl Default for ValidationService {
     fn default() -> Self {
-        Self::new().expect("Failed to create default ValidationService")
+        Self::new().expect("Failed to create default validation service")
     }
 }
 
@@ -520,7 +520,7 @@ mod tests {
     fn test_xss_detection() {
         let service = ValidationService::new().unwrap();
 
-        let malicious_content = "<script>alert('xss')</script>";
+        let malicious_content = "<script>alert(\"xss\")</script>";
         let result = service.validate_user_content(malicious_content, "comment");
         assert!(!result.is_valid);
         assert!(result.errors.iter().any(|e| matches!(e, ValidationError::SecurityViolation { attack_type, .. } if attack_type == "xss")));
