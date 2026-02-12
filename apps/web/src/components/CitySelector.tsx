@@ -19,8 +19,13 @@ const CitySelector: React.FC = () => {
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/v1/cities`)
-      .then((r) => r.json())
-      .then((data) => setCities(data))
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setCities(data);
+      })
       .catch(() => {});
   }, []);
 

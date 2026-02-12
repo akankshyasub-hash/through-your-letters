@@ -1,18 +1,70 @@
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
 };
+use bcrypt::verify;
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
     domain::lettering::repository::LetteringRepository,
     presentation::http::{errors::AppError, middleware::admin::AdminClaims, state::AppState},
 };
+
+async fn log_admin_action(
+    state: &AppState,
+    admin_sub: &str,
+    action: &str,
+    lettering_id: Option<Uuid>,
+    metadata: serde_json::Value,
+) {
+    let _ = sqlx::query(
+        "INSERT INTO admin_audit_logs (id, admin_sub, action, lettering_id, metadata) VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(admin_sub)
+    .bind(action)
+    .bind(lettering_id)
+    .bind(metadata)
+    .execute(&state.db)
+    .await;
+}
+
+async fn notify_lettering_owner(
+    state: &AppState,
+    lettering_id: Uuid,
+    n_type: &str,
+    title: &str,
+    body: &str,
+    metadata: serde_json::Value,
+) {
+    let owner_user_id: Option<Uuid> =
+        match sqlx::query_scalar::<_, Option<Uuid>>("SELECT user_id FROM letterings WHERE id = $1")
+            .bind(lettering_id)
+            .fetch_one(&state.db)
+            .await
+        {
+            Ok(v) => v,
+            Err(_) => None,
+        };
+
+    if let Some(user_id) = owner_user_id {
+        let _ = sqlx::query(
+            "INSERT INTO notifications (id, user_id, type, title, body, metadata) VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(user_id)
+        .bind(n_type)
+        .bind(title)
+        .bind(body)
+        .bind(metadata)
+        .execute(&state.db)
+        .await;
+    }
+}
 
 // --- DTOs ---
 
@@ -95,19 +147,18 @@ pub async fn login(
         return Err(AppError::Forbidden("Invalid credentials".to_string()));
     }
 
-    // Hash the provided password and compare with stored hash
-    let mut hasher = Sha256::new();
-    hasher.update(body.password.as_bytes());
-    let password_hash = format!("{:x}", hasher.finalize());
+    // Verify password against bcrypt hash
+    let valid = verify(&body.password, &state.config.admin_password_hash)
+        .map_err(|_| AppError::InternalError("Password verification failed".to_string()))?;
 
-    if password_hash != state.config.admin_password_hash {
+    if !valid {
         return Err(AppError::Forbidden("Invalid credentials".to_string()));
     }
 
     // Issue JWT valid for 24 hours
     let exp = (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize;
     let claims = AdminClaims {
-        sub: body.email,
+        sub: body.email.clone(),
         exp,
     };
 
@@ -117,6 +168,15 @@ pub async fn login(
         &EncodingKey::from_secret(state.config.jwt_secret.as_bytes()),
     )
     .map_err(|e| AppError::InternalError(format!("Token generation failed: {}", e)))?;
+
+    log_admin_action(
+        &state,
+        &body.email,
+        "ADMIN_LOGIN",
+        None,
+        serde_json::json!({}),
+    )
+    .await;
 
     tracing::info!("Admin login successful");
     Ok(Json(LoginResponse { token }))
@@ -186,6 +246,7 @@ pub async fn get_moderation_queue(
 
 pub async fn approve_lettering(
     State(state): State<AppState>,
+    Extension(claims): Extension<AdminClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let result = sqlx::query!(
@@ -200,12 +261,31 @@ pub async fn approve_lettering(
         return Err(AppError::NotFound("Lettering not found".to_string()));
     }
 
+    log_admin_action(
+        &state,
+        &claims.sub,
+        "APPROVE_LETTERING",
+        Some(id),
+        serde_json::json!({}),
+    )
+    .await;
+    notify_lettering_owner(
+        &state,
+        id,
+        "MODERATION_APPROVED",
+        "Your upload was approved",
+        "Your lettering contribution has been approved and is now publicly visible.",
+        serde_json::json!({ "lettering_id": id }),
+    )
+    .await;
+
     tracing::info!(lettering_id = %id, "Lettering approved");
     Ok(StatusCode::OK)
 }
 
 pub async fn reject_lettering(
     State(state): State<AppState>,
+    Extension(claims): Extension<AdminClaims>,
     Path(id): Path<Uuid>,
     Json(body): Json<RejectRequest>,
 ) -> Result<StatusCode, AppError> {
@@ -216,7 +296,7 @@ pub async fn reject_lettering(
     let result = sqlx::query!(
         "UPDATE letterings SET status = 'REJECTED', detected_text = $2, updated_at = NOW() WHERE id = $1",
         id,
-        reason,
+        reason.clone(),
     )
     .execute(&state.db)
     .await
@@ -226,12 +306,31 @@ pub async fn reject_lettering(
         return Err(AppError::NotFound("Lettering not found".to_string()));
     }
 
+    log_admin_action(
+        &state,
+        &claims.sub,
+        "REJECT_LETTERING",
+        Some(id),
+        serde_json::json!({ "reason": reason.clone() }),
+    )
+    .await;
+    notify_lettering_owner(
+        &state,
+        id,
+        "MODERATION_REJECTED",
+        "Your upload was rejected",
+        "Your lettering contribution was rejected by moderation.",
+        serde_json::json!({ "lettering_id": id, "reason": reason.clone() }),
+    )
+    .await;
+
     tracing::info!(lettering_id = %id, reason = %reason, "Lettering rejected");
     Ok(StatusCode::OK)
 }
 
 pub async fn delete_any_lettering(
     State(state): State<AppState>,
+    Extension(claims): Extension<AdminClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let lettering = state
@@ -240,6 +339,16 @@ pub async fn delete_any_lettering(
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?
         .ok_or_else(|| AppError::NotFound("Lettering not found".to_string()))?;
+
+    notify_lettering_owner(
+        &state,
+        id,
+        "MODERATION_DELETED",
+        "Your upload was deleted",
+        "Your lettering contribution was removed by moderation.",
+        serde_json::json!({ "lettering_id": id }),
+    )
+    .await;
 
     // Clean up R2 storage
     let url_parts: Vec<&str> = lettering.image_url.split('/').collect();
@@ -268,6 +377,15 @@ pub async fn delete_any_lettering(
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?;
 
+    log_admin_action(
+        &state,
+        &claims.sub,
+        "DELETE_LETTERING",
+        Some(id),
+        serde_json::json!({}),
+    )
+    .await;
+
     tracing::info!(lettering_id = %id, "Lettering deleted by admin");
     Ok(StatusCode::NO_CONTENT)
 }
@@ -275,6 +393,7 @@ pub async fn delete_any_lettering(
 /// "Keep & Clear": Resets report_count to 0, clears reasons, restores status to APPROVED
 pub async fn clear_reports(
     State(state): State<AppState>,
+    Extension(claims): Extension<AdminClaims>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let result = sqlx::query!(
@@ -293,6 +412,24 @@ pub async fn clear_reports(
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Lettering not found".to_string()));
     }
+
+    log_admin_action(
+        &state,
+        &claims.sub,
+        "CLEAR_REPORTS",
+        Some(id),
+        serde_json::json!({}),
+    )
+    .await;
+    notify_lettering_owner(
+        &state,
+        id,
+        "REPORTS_CLEARED",
+        "Reports cleared on your upload",
+        "Moderator reviewed and cleared reports on your lettering contribution.",
+        serde_json::json!({ "lettering_id": id }),
+    )
+    .await;
 
     tracing::info!(lettering_id = %id, "Reports cleared by admin");
     Ok(StatusCode::OK)

@@ -9,13 +9,30 @@ interface GalleryPage {
   total: number;
 }
 
-export function useInfiniteGallery(cityId?: string | null) {
+export function useInfiniteGallery(
+  cityId?: string | null,
+  script?: string | null,
+  style?: string | null,
+  sortBy?: string | null,
+) {
   return useInfiniteQuery<GalleryPage>({
-    queryKey: ["letterings-infinite", cityId ?? "all"],
+    queryKey: [
+      "letterings-infinite",
+      cityId ?? "all",
+      script ?? "",
+      style ?? "",
+      sortBy ?? "",
+    ],
     queryFn: async ({ pageParam }) => {
       const offset = pageParam as number;
-      const data = await api.getGallery(PAGE_SIZE, offset, cityId);
-      return data;
+      return api.getGallery({
+        limit: PAGE_SIZE,
+        offset,
+        cityId,
+        script,
+        style,
+        sortBy,
+      });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {

@@ -1,7 +1,7 @@
-use async_trait::async_trait;
-use uuid::Uuid;
 use super::entity::City;
 use crate::domain::lettering::errors::DomainError;
+use async_trait::async_trait;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait CityRepository: Send + Sync {

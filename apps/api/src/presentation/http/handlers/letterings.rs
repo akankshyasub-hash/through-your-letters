@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect},
 };
 use serde::Deserialize;
@@ -10,12 +10,15 @@ use uuid::Uuid;
 
 use crate::{
     domain::lettering::repository::LetteringRepository,
-    presentation::http::{errors::AppError, state::AppState},
+    presentation::http::{
+        errors::AppError, middleware::user::decode_optional_user_claims, state::AppState,
+    },
 };
 
 pub async fn get_lettering(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let lettering = state
         .lettering_repo
@@ -24,9 +27,27 @@ pub async fn get_lettering(
         .map_err(|e| AppError::InternalError(e.to_string()))?
         .ok_or_else(|| AppError::NotFound("Lettering not found".to_string()))?;
 
-    Ok(Json(
-        serde_json::to_value(&lettering).map_err(|e| AppError::InternalError(e.to_string()))?,
-    ))
+    let owner_user_id: Option<Uuid> =
+        sqlx::query_scalar::<_, Option<Uuid>>("SELECT user_id FROM letterings WHERE id = $1")
+            .bind(id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let requester_user_id = decode_optional_user_claims(&headers, &state.config.jwt_secret)
+        .and_then(|claims| Uuid::parse_str(&claims.sub).ok());
+
+    let is_owner = owner_user_id
+        .and_then(|owner| requester_user_id.map(|requester| requester == owner))
+        .unwrap_or(false);
+
+    let mut value =
+        serde_json::to_value(&lettering).map_err(|e| AppError::InternalError(e.to_string()))?;
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("is_owner".to_string(), serde_json::Value::Bool(is_owner));
+    }
+
+    Ok(Json(value))
 }
 
 #[derive(Debug, Deserialize)]
@@ -154,6 +175,7 @@ pub struct LinkRevisitRequest {
 pub async fn delete_lettering(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
     let lettering = state
         .lettering_repo
@@ -161,6 +183,28 @@ pub async fn delete_lettering(
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?
         .ok_or_else(|| AppError::NotFound("Lettering not found".to_string()))?;
+
+    let owner_user_id: Option<Uuid> =
+        sqlx::query_scalar::<_, Option<Uuid>>("SELECT user_id FROM letterings WHERE id = $1")
+            .bind(id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let owner_id = owner_user_id.ok_or_else(|| {
+        AppError::Forbidden(
+            "This upload cannot be self-deleted because it is not linked to a user account"
+                .to_string(),
+        )
+    })?;
+
+    let requester_user_id = decode_optional_user_claims(&headers, &state.config.jwt_secret)
+        .and_then(|claims| Uuid::parse_str(&claims.sub).ok());
+    if requester_user_id != Some(owner_id) {
+        return Err(AppError::Forbidden(
+            "You can only delete your own uploads".to_string(),
+        ));
+    }
 
     // Delete from Cloudflare R2
     let url_parts: Vec<&str> = lettering.image_url.split('/').collect();

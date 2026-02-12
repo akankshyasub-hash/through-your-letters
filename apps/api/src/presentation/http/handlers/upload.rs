@@ -1,7 +1,9 @@
 use crate::{
     domain::lettering::repository::LetteringRepository,
     infrastructure::queue::redis_queue::MlJob,
-    presentation::http::{errors::AppError, state::AppState},
+    presentation::http::{
+        errors::AppError, middleware::user::decode_optional_user_claims, state::AppState,
+    },
 };
 use axum::{
     Json,
@@ -106,6 +108,33 @@ pub async fn upload_lettering(
 
     let data = image_data.ok_or(AppError::BadRequest("Missing image".into()))?;
 
+    let city_id = city_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(Uuid::parse_str)
+        .transpose()
+        .map_err(|_| AppError::BadRequest("Invalid city_id".into()))?
+        .unwrap_or_else(|| Uuid::parse_str("0194f123-4567-7abc-8def-0123456789ab").unwrap());
+
+    let upload_allowed = sqlx::query_scalar::<_, Option<bool>>(
+        "SELECT COALESCE(rp.uploads_enabled, true)
+         FROM cities c
+         LEFT JOIN region_policies rp ON rp.country_code = c.country_code
+         WHERE c.id = $1",
+    )
+    .bind(city_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
+    .flatten()
+    .ok_or_else(|| AppError::BadRequest("City not found".to_string()))?;
+
+    if !upload_allowed {
+        return Err(AppError::Forbidden(
+            "Uploads are disabled for this region".to_string(),
+        ));
+    }
+
     // Virus Scanning
     let is_safe = state
         .virus_scanner
@@ -169,14 +198,6 @@ pub async fn upload_lettering(
         )
         .await?;
 
-    let city_id = city_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .map(Uuid::parse_str)
-        .transpose()
-        .map_err(|_| AppError::BadRequest("Invalid city_id".into()))?
-        .unwrap_or_else(|| Uuid::parse_str("0194f123-4567-7abc-8def-0123456789ab").unwrap());
-
     let lettering = crate::domain::lettering::entity::Lettering {
         id,
         city_id,
@@ -199,6 +220,16 @@ pub async fn upload_lettering(
     };
 
     state.lettering_repo.create(&lettering).await?;
+
+    if let Some(claims) = decode_optional_user_claims(&headers, &state.config.jwt_secret) {
+        if let Ok(user_id) = Uuid::parse_str(&claims.sub) {
+            let _ = sqlx::query("UPDATE letterings SET user_id = $1 WHERE id = $2")
+                .bind(user_id)
+                .bind(id)
+                .execute(&state.db)
+                .await;
+        }
+    }
 
     if state.config.enable_ml_processing {
         if let Err(err) = state

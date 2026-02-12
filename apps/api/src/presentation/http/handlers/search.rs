@@ -6,7 +6,6 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    application::search_letterings::{dto::SearchRequest, use_case::SearchLetteringsUseCase},
     domain::lettering::entity::Lettering,
     infrastructure::repositories::sqlx_lettering_repository::SqlxLetteringRepository,
     presentation::http::state::AppState,
@@ -17,6 +16,7 @@ pub struct SearchQuery {
     q: String,
     #[serde(default = "default_limit")]
     limit: i64,
+    lang: Option<String>,
 }
 
 fn default_limit() -> i64 {
@@ -28,15 +28,12 @@ pub async fn search_letterings(
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<Vec<Lettering>>, StatusCode> {
     let repository = SqlxLetteringRepository::new(state.db.clone());
-    let use_case = SearchLetteringsUseCase::new(Box::new(repository));
-
-    let request = SearchRequest {
-        query: params.q,
-        limit: Some(params.limit),
-    };
-
-    let results = use_case
-        .execute(request)
+    let results = repository
+        .search_with_locale(
+            &params.q,
+            params.lang.as_deref(),
+            params.limit.clamp(1, 100),
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

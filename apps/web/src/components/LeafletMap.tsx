@@ -63,8 +63,13 @@ const LeafletMap: React.FC<{
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/v1/geo/markers`)
-      .then((r) => r.json())
-      .then((data) => setMarkers(data))
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setMarkers(data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -72,7 +77,10 @@ const LeafletMap: React.FC<{
   useEffect(() => {
     if (showDeserts && desertData.length === 0) {
       fetch(`${API_BASE_URL}/api/v1/analytics/neighborhoods`)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error();
+          return r.json();
+        })
         .then((json) => {
           // Map neighborhoods to approximate coordinates
           const PIN_COORDS: Record<string, [number, number]> = {

@@ -1,6 +1,9 @@
 use super::dto::AddCommentRequest;
 use crate::domain::lettering::errors::DomainError;
-use crate::domain::social::{comment::Comment, repository::SocialRepository};
+use crate::domain::social::{
+    comment::{Comment, CommentModerationInput},
+    repository::SocialRepository,
+};
 use uuid::Uuid;
 
 pub struct SocialUseCase {
@@ -24,10 +27,18 @@ impl SocialUseCase {
     pub async fn add_comment(
         &self,
         request: AddCommentRequest,
+        user_id: Uuid,
+        moderation: CommentModerationInput,
         user_ip: Option<&str>,
     ) -> Result<Comment, DomainError> {
         self.repository
-            .add_comment(request.lettering_id, request.content, user_ip)
+            .add_comment(
+                request.lettering_id,
+                user_id,
+                request.content,
+                user_ip,
+                moderation,
+            )
             .await
     }
 

@@ -1,15 +1,16 @@
 use super::{
     handlers::{
-        admin, analytics, cities, community, docs, gallery, geo, health, letterings, search,
-        social, upload, ws,
+        admin, admin_cities, admin_comments, admin_region_policies, analytics, auth, cities,
+        community, docs, gallery, geo, health, letterings, me, search, social, upload, ws,
     },
     middleware::admin::require_admin,
     middleware::rate_limit::rate_limit_middleware,
+    middleware::request_id::request_id_middleware,
     state::AppState,
 };
 use axum::{
     Router, middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post, put},
 };
 
 pub fn create_router(state: AppState) -> Router {
@@ -31,6 +32,35 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/admin/letterings/{id}/clear-reports",
             post(admin::clear_reports),
         )
+        .route(
+            "/api/v1/admin/cities/discover",
+            post(admin_cities::discover_cities),
+        )
+        .route(
+            "/api/v1/admin/cities/bootstrap-capitals",
+            post(admin_cities::bootstrap_capitals),
+        )
+        .route("/api/v1/admin/comments", get(admin_comments::list_comments))
+        .route(
+            "/api/v1/admin/comments/{id}/hide",
+            post(admin_comments::hide_comment),
+        )
+        .route(
+            "/api/v1/admin/comments/{id}/restore",
+            post(admin_comments::restore_comment),
+        )
+        .route(
+            "/api/v1/admin/comments/{id}",
+            delete(admin_comments::delete_comment),
+        )
+        .route(
+            "/api/v1/admin/region-policies",
+            get(admin_region_policies::list_region_policies),
+        )
+        .route(
+            "/api/v1/admin/region-policies/{country_code}",
+            put(admin_region_policies::upsert_region_policy),
+        )
         .route("/api/v1/admin/stats", get(admin::get_stats))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
@@ -49,8 +79,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/letterings/search", get(search::search_letterings))
         .route(
             "/api/v1/letterings/{id}",
-            // get(letterings::get_lettering).delete(letterings::delete_lettering),
-            get(letterings::get_lettering),
+            get(letterings::get_lettering).delete(letterings::delete_lettering),
         )
         .route(
             "/api/v1/letterings/{id}/report",
@@ -105,6 +134,18 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/cities/{id}/stats", get(cities::get_city_stats))
         // Docs
         .route("/api/v1/docs", get(docs::api_docs))
+        // Auth
+        .route("/api/v1/auth/register", post(auth::register))
+        .route("/api/v1/auth/login", post(auth::login_user))
+        .route("/api/v1/auth/me", get(auth::me))
+        // User workspace
+        .route("/api/v1/me/letterings", get(me::list_my_letterings))
+        .route("/api/v1/me/letterings/{id}", patch(me::update_my_lettering))
+        .route("/api/v1/me/notifications", get(me::list_notifications))
+        .route(
+            "/api/v1/me/notifications/{id}/read",
+            post(me::mark_notification_read),
+        )
         // Revisits
         .route(
             "/api/v1/letterings/{id}/revisits",
@@ -117,5 +158,6 @@ pub fn create_router(state: AppState) -> Router {
         // Admin (protected by JWT middleware)
         .merge(upload_routes)
         .merge(admin_routes)
+        .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
 }

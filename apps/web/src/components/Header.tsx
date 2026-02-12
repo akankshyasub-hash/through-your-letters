@@ -1,13 +1,8 @@
 import React from "react";
-import { AppMode } from "../types";
+import { Link } from "react-router-dom";
 import CitySelector from "./CitySelector";
 
-interface HeaderProps {
-  mode: AppMode;
-  setMode: (mode: AppMode) => void;
-}
-
-const Header: React.FC<HeaderProps> = () => {
+const Header: React.FC = () => {
   return (
     <header className="px-6 md:px-16 pt-12 pb-12 border-b-4 border-black bg-white relative overflow-hidden z-10">
       <div className="absolute top-0 right-0 w-64 h-full bg-[#cc543a]/5 -skew-x-12 transform translate-x-32 -z-10"></div>
@@ -24,10 +19,12 @@ const Header: React.FC<HeaderProps> = () => {
             <CitySelector />
           </div>
 
-          <div className="flex flex-col text-5xl md:text-8xl font-black tracking-tighter uppercase leading-[0.85]">
-            <span className="text-[#cc543a]">Through Your</span>
-            <span className="text-black">Letters</span>
-          </div>
+          <Link to="/" className="block">
+            <div className="flex flex-col text-5xl md:text-8xl font-black tracking-tighter uppercase leading-[0.85]">
+              <span className="text-[#cc543a]">Through Your</span>
+              <span className="text-black">Letters</span>
+            </div>
+          </Link>
 
           <div className="mt-8">
             <span className="text-xs font-black uppercase tracking-widest text-slate-400 leading-relaxed max-w-lg block">

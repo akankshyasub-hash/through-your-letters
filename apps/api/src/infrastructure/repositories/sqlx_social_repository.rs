@@ -1,6 +1,9 @@
 use crate::domain::{
     lettering::errors::DomainError,
-    social::{comment::Comment, repository::SocialRepository},
+    social::{
+        comment::{Comment, CommentModerationInput},
+        repository::SocialRepository,
+    },
 };
 use async_trait::async_trait;
 use sqlx::{PgPool, types::ipnetwork::IpNetwork};
@@ -85,40 +88,81 @@ impl SocialRepository for SqlxSocialRepository {
     async fn add_comment(
         &self,
         lettering_id: Uuid,
+        user_id: Uuid,
         content: String,
         user_ip: Option<&str>,
+        moderation: CommentModerationInput,
     ) -> Result<Comment, DomainError> {
         let ip = user_ip.and_then(|i| IpNetwork::from_str(i).ok());
         let id = Uuid::now_v7();
-        sqlx::query!(
-            "INSERT INTO comments (id, lettering_id, content, user_ip) VALUES ($1, $2, $3, $4)",
-            id,
-            lettering_id,
-            content,
-            ip
+        sqlx::query(
+            "INSERT INTO comments (
+                id, lettering_id, user_id, content, user_ip, status,
+                moderation_score, moderation_flags, auto_flagged, needs_review, review_priority,
+                moderated_at, moderated_by, moderation_reason
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6,
+                $7, $8::jsonb, $9, $10, $11,
+                CASE WHEN $6 = 'HIDDEN' THEN NOW() ELSE NULL END, $12, $13
+            )",
         )
+        .bind(id)
+        .bind(lettering_id)
+        .bind(user_id)
+        .bind(&content)
+        .bind(ip)
+        .bind(&moderation.status)
+        .bind(moderation.moderation_score)
+        .bind(serde_json::to_value(&moderation.moderation_flags).unwrap_or(serde_json::json!([])))
+        .bind(moderation.auto_flagged)
+        .bind(moderation.needs_review)
+        .bind(moderation.review_priority)
+        .bind(moderation.moderated_by)
+        .bind(moderation.moderation_reason)
         .execute(&self.pool)
         .await
         .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
-        sqlx::query!(
-            "UPDATE letterings SET comments_count = comments_count + 1 WHERE id = $1",
-            lettering_id
+
+        if moderation.status == "VISIBLE" {
+            sqlx::query("UPDATE letterings SET comments_count = comments_count + 1 WHERE id = $1")
+                .bind(lettering_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        }
+
+        let row = sqlx::query_as::<_, Comment>(
+            "SELECT c.id, c.lettering_id, c.content, c.user_id, \
+                    COALESCE(NULLIF(u.display_name, ''), u.email, 'Anonymous') as commenter_name, \
+                    c.status, c.moderation_score, c.moderation_flags, c.auto_flagged, c.needs_review, c.review_priority, \
+                    c.user_ip, c.moderated_at, c.moderated_by, c.moderation_reason, c.created_at, c.updated_at \
+             FROM comments c \
+             LEFT JOIN users u ON u.id = c.user_id \
+             WHERE c.id = $1",
         )
-        .execute(&self.pool)
+        .bind(id)
+        .fetch_one(&self.pool)
         .await
         .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
-        Ok(Comment {
-            id,
-            lettering_id,
-            content,
-            user_ip: ip,
-            created_at: chrono::Utc::now(),
-        })
+
+        Ok(row)
     }
 
     async fn get_comments(&self, lettering_id: Uuid) -> Result<Vec<Comment>, DomainError> {
-        let rows = sqlx::query_as!(Comment, r#"SELECT id, lettering_id, content, user_ip as "user_ip: _", created_at FROM comments WHERE lettering_id = $1 ORDER BY created_at DESC"#, lettering_id)
-            .fetch_all(&self.pool).await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+        let rows = sqlx::query_as::<_, Comment>(
+            "SELECT c.id, c.lettering_id, c.content, c.user_id, \
+                    COALESCE(NULLIF(u.display_name, ''), u.email, 'Anonymous') as commenter_name, \
+                    c.status, c.moderation_score, c.moderation_flags, c.auto_flagged, c.needs_review, c.review_priority, \
+                    c.user_ip, c.moderated_at, c.moderated_by, c.moderation_reason, c.created_at, c.updated_at \
+             FROM comments c \
+             LEFT JOIN users u ON u.id = c.user_id \
+             WHERE c.lettering_id = $1 AND c.status = 'VISIBLE' \
+             ORDER BY c.created_at DESC",
+        )
+        .bind(lettering_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
         Ok(rows)
     }
 

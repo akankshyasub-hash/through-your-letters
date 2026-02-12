@@ -115,3 +115,39 @@ export interface NeighborhoodCount {
   pin_code: string;
   count: number;
 }
+
+export interface GalleryFilters {
+  script?: string;
+  style?: string;
+  sortBy?: string;
+}
+
+export const SCRIPT_OPTIONS = [
+  "Kannada",
+  "Devanagari",
+  "Latin",
+  "Tamil",
+  "Telugu",
+  "Bengali",
+  "Malayalam",
+  "Urdu",
+  "Odia",
+  "Gujarati",
+] as const;
+
+export const STYLE_OPTIONS = [
+  "Hand-painted",
+  "Neon",
+  "Carved",
+  "Stenciled",
+  "Printed",
+  "Digital",
+  "Calligraphic",
+  "Graffiti",
+] as const;
+
+export const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "popular", label: "Most Liked" },
+] as const;

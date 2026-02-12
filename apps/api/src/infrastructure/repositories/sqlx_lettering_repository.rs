@@ -95,6 +95,63 @@ impl SqlxLetteringRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    fn ts_config_for_locale(locale: Option<&str>) -> &'static str {
+        let normalized = locale
+            .unwrap_or("en")
+            .trim()
+            .to_ascii_lowercase();
+
+        if normalized.starts_with("en") {
+            "english"
+        } else {
+            "simple"
+        }
+    }
+
+    pub async fn search_with_locale(
+        &self,
+        query: &str,
+        locale: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<Lettering>, DomainError> {
+        let ts_config = Self::ts_config_for_locale(locale);
+        let like = format!("%{}%", query);
+        let safe_limit = limit.clamp(1, 100);
+
+        let rows = sqlx::query_as::<_, LetteringRow>(
+            r#"SELECT id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large,
+                      pin_code, status, created_at, updated_at, likes_count, comments_count,
+                      detected_text, description, image_hash, report_count, report_reasons, cultural_context,
+                      ml_style, ml_script, ml_confidence, ml_color_palette,
+                      ST_AsText(location) AS location_wkt, uploaded_by_ip
+               FROM letterings
+               WHERE status = 'APPROVED'
+                 AND COALESCE((
+                     SELECT rp.discoverability_enabled
+                     FROM cities c
+                     LEFT JOIN region_policies rp ON rp.country_code = c.country_code
+                     WHERE c.id = letterings.city_id
+                 ), true)
+                 AND (
+                     detected_text_tsv @@ websearch_to_tsquery($1::regconfig, $2)
+                     OR detected_text ILIKE $3
+                     OR description ILIKE $3
+                     OR contributor_tag ILIKE $3
+                 )
+               ORDER BY likes_count DESC, created_at DESC
+               LIMIT $4"#,
+        )
+        .bind(ts_config)
+        .bind(query)
+        .bind(like)
+        .bind(safe_limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
+
+        Ok(rows.into_iter().map(Lettering::from).collect())
+    }
 }
 
 #[async_trait]
@@ -135,12 +192,7 @@ impl LetteringRepository for SqlxLetteringRepository {
     }
 
     async fn search(&self, q: &str) -> Result<Vec<Lettering>, DomainError> {
-        let rows = sqlx::query_as!(LetteringRow,
-            r#"SELECT id, city_id, contributor_tag, image_url, thumbnail_small, thumbnail_medium, thumbnail_large, pin_code, status, created_at, updated_at, likes_count, comments_count, detected_text, description, image_hash, report_count, report_reasons, cultural_context, ml_style, ml_script, ml_confidence, ml_color_palette, ST_AsText(location) as "location_wkt!", uploaded_by_ip as "uploaded_by_ip: _" FROM letterings
-               WHERE (detected_text_tsv @@ websearch_to_tsquery('english', $1) OR contributor_tag ILIKE $2) AND status = 'APPROVED' LIMIT 50"#,
-            q, format!("%{}%", q)
-        ).fetch_all(&self.pool).await.map_err(|e| DomainError::InfrastructureError(e.to_string()))?;
-        Ok(rows.into_iter().map(Lettering::from).collect())
+        self.search_with_locale(q, Some("en"), 50).await
     }
 
     async fn count_by_contributor_today(&self, tag: &str) -> Result<i64, DomainError> {

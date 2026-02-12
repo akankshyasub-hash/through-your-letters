@@ -15,6 +15,7 @@ pub struct Config {
     pub jwt_secret: String,
     pub admin_email: String,
     pub admin_password_hash: String,
+    pub city_discovery_user_agent: Option<String>,
     pub huggingface_token: Option<String>,
     pub enable_ml_processing: bool,
     pub ml_model_path: String,
@@ -45,6 +46,7 @@ impl Config {
             jwt_secret: std::env::var("JWT_SECRET")?,
             admin_email: std::env::var("ADMIN_EMAIL")?,
             admin_password_hash: std::env::var("ADMIN_PASSWORD_HASH")?,
+            city_discovery_user_agent: std::env::var("CITY_DISCOVERY_USER_AGENT").ok(),
             huggingface_token: std::env::var("HUGGINGFACE_TOKEN").ok(),
             enable_ml_processing: std::env::var("ENABLE_ML_PROCESSING")
                 .unwrap_or("true".into())

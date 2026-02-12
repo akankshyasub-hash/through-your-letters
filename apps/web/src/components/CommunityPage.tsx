@@ -1,18 +1,7 @@
 import React, { useState, useEffect } from "react";
-import {
-  Trophy,
-  FolderOpen,
-  Target,
-  Loader2,
-  Plus,
-  Heart,
-} from "lucide-react";
+import { Trophy, FolderOpen, Target, Loader2, Plus, Heart } from "lucide-react";
 import { API_BASE_URL } from "../constants";
-import {
-  LeaderboardEntry,
-  CollectionSummary,
-  ChallengeData,
-} from "../types";
+import { LeaderboardEntry, CollectionSummary, ChallengeData } from "../types";
 import { useToastStore } from "../store/useToastStore";
 
 type Tab = "leaderboard" | "collections" | "challenges";
@@ -26,7 +15,11 @@ const CommunityPage: React.FC<{
   const [challenges, setChallenges] = useState<ChallengeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [newCollection, setNewCollection] = useState({ name: "", description: "", creator_tag: "" });
+  const [newCollection, setNewCollection] = useState({
+    name: "",
+    description: "",
+    creator_tag: "",
+  });
   const { addToast } = useToastStore();
 
   useEffect(() => {
@@ -39,13 +32,22 @@ const CommunityPage: React.FC<{
           : `${API_BASE_URL}/api/v1/challenges`;
 
     fetch(endpoint)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data) => {
+        if (!Array.isArray(data)) throw new Error("Unexpected response");
         if (tab === "leaderboard") setLeaderboard(data);
         else if (tab === "collections") setCollections(data);
         else setChallenges(data);
       })
-      .catch(() => addToast("Failed to load community data", "error"))
+      .catch(() => {
+        if (tab === "leaderboard") setLeaderboard([]);
+        else if (tab === "collections") setCollections([]);
+        else setChallenges([]);
+        addToast("Failed to load community data", "error");
+      })
       .finally(() => setLoading(false));
   }, [tab, addToast]);
 
@@ -63,7 +65,9 @@ const CommunityPage: React.FC<{
         setShowCreate(false);
         setNewCollection({ name: "", description: "", creator_tag: "" });
         // Refresh
-        const data = await fetch(`${API_BASE_URL}/api/v1/collections`).then((r) => r.json());
+        const data = await fetch(`${API_BASE_URL}/api/v1/collections`).then(
+          (r) => r.json(),
+        );
         setCollections(data);
       } else {
         throw new Error();
@@ -75,7 +79,11 @@ const CommunityPage: React.FC<{
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "leaderboard", label: "Leaderboard", icon: <Trophy size={16} /> },
-    { key: "collections", label: "Collections", icon: <FolderOpen size={16} /> },
+    {
+      key: "collections",
+      label: "Collections",
+      icon: <FolderOpen size={16} />,
+    },
     { key: "challenges", label: "Challenges", icon: <Target size={16} /> },
   ];
 
@@ -189,7 +197,10 @@ const CommunityPage: React.FC<{
                     className="w-full border-2 border-black p-3 font-black text-sm outline-none focus:border-[#cc543a]"
                     value={newCollection.name}
                     onChange={(e) =>
-                      setNewCollection({ ...newCollection, name: e.target.value })
+                      setNewCollection({
+                        ...newCollection,
+                        name: e.target.value,
+                      })
                     }
                     required
                   />
@@ -198,7 +209,10 @@ const CommunityPage: React.FC<{
                     className="w-full border-2 border-black p-3 font-black text-sm outline-none focus:border-[#cc543a]"
                     value={newCollection.creator_tag}
                     onChange={(e) =>
-                      setNewCollection({ ...newCollection, creator_tag: e.target.value })
+                      setNewCollection({
+                        ...newCollection,
+                        creator_tag: e.target.value,
+                      })
                     }
                     required
                   />
@@ -208,7 +222,10 @@ const CommunityPage: React.FC<{
                     rows={3}
                     value={newCollection.description}
                     onChange={(e) =>
-                      setNewCollection({ ...newCollection, description: e.target.value })
+                      setNewCollection({
+                        ...newCollection,
+                        description: e.target.value,
+                      })
                     }
                   />
                   <button
@@ -310,8 +327,7 @@ const CommunityPage: React.FC<{
 
                       {ch.ends_at && (
                         <p className="text-[9px] font-bold text-slate-400">
-                          Ends:{" "}
-                          {new Date(ch.ends_at).toLocaleDateString()}
+                          Ends: {new Date(ch.ends_at).toLocaleDateString()}
                         </p>
                       )}
                     </div>
