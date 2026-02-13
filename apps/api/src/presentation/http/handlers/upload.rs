@@ -111,10 +111,8 @@ pub async fn upload_lettering(
     let city_id = city_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .map(Uuid::parse_str)
-        .transpose()
-        .map_err(|_| AppError::BadRequest("Invalid city_id".into()))?
-        .unwrap_or_else(|| Uuid::parse_str("0194f123-4567-7abc-8def-0123456789ab").unwrap());
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or_else(|| AppError::BadRequest("city_id is required and must be a valid UUID".into()))?;
 
     let upload_allowed = sqlx::query_scalar::<_, Option<bool>>(
         "SELECT COALESCE(rp.uploads_enabled, true)
@@ -156,7 +154,7 @@ pub async fn upload_lettering(
     let mut buf = Cursor::new(Vec::new());
     img.resize(1200, 1200, FilterType::Lanczos3)
         .write_to(&mut buf, ImageFormat::WebP)
-        .unwrap();
+        .map_err(|e| AppError::InternalError(format!("Failed to encode image to WebP: {}", e)))?;
     let image_bytes = buf.into_inner();
 
     // Hash Check for Duplicates
@@ -188,7 +186,7 @@ pub async fn upload_lettering(
     let mut thumb_buf = Cursor::new(Vec::new());
     img.thumbnail(400, 400)
         .write_to(&mut thumb_buf, ImageFormat::WebP)
-        .unwrap();
+        .map_err(|e| AppError::InternalError(format!("Failed to encode thumbnail to WebP: {}", e)))?;
     let thumb_url = state
         .storage
         .upload(
@@ -198,36 +196,69 @@ pub async fn upload_lettering(
         )
         .await?;
 
+    // let (mut lng, mut lat) = crate::infrastructure::geocoding::coordinates_for_pincode(&pin);
+    // if (lng - 77.5946).abs() < 0.0001 && (lat - 12.9716).abs() < 0.0001 {
+    //     let city_row = sqlx::query!("SELECT center_lat, center_lng FROM cities WHERE id = $1", city_id)
+    //         .fetch_optional(&state.db)
+    //         .await
+    //         .unwrap_or(None);
+    
+    //     if let Some(row) = city_row {
+    //         if let (Some(c_lat), Some(c_lng)) = (row.center_lat, row.center_lng) {
+    //             lat = c_lat;
+    //             lng = c_lng;
+    //         }
+    //     }
+    // }
+    // Fetch city coordinates for geolocation
+    let city_coords = sqlx::query_as::<_, (f64, f64)>(
+            "SELECT center_lng, center_lat FROM cities WHERE id = $1"
+        )
+        .bind(city_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error fetching city: {}", e);
+            AppError::InternalError(format!("Failed to fetch city coordinates: {}", e))
+        })?;
+    let final_lng = city_coords.0; 
+    let final_lat = city_coords.1;
+
     let lettering = crate::domain::lettering::entity::Lettering {
-        id,
-        city_id,
-        contributor_tag: contributor,
-        image_url: image_url.clone(),
-        thumbnail_urls: crate::domain::lettering::entity::ThumbnailUrls {
-            small: thumb_url.clone(),
-            medium: thumb_url.clone(),
-            large: image_url.clone(),
-        },
-        location: crate::domain::lettering::entity::Coordinates {
-            r#type: "Point".into(),
-            coordinates: vec![77.5946, 12.9716],
-        },
-        pin_code: pin,
-        description: desc,
-        image_hash: Some(image_hash),
-        uploaded_by_ip: extract_client_ip(&headers),
-        ..Default::default()
-    };
+            id,
+            city_id,
+            contributor_tag: contributor,
+            image_url: image_url.clone(),
+            thumbnail_urls: crate::domain::lettering::entity::ThumbnailUrls {
+                small: thumb_url.clone(),
+                medium: thumb_url.clone(),
+                large: image_url.clone(),
+            },
+            location: crate::domain::lettering::entity::Coordinates {
+                r#type: "Point".into(),
+                coordinates: vec![final_lng, final_lat],
+            },
+            pin_code: pin,
+            description: desc,
+            image_hash: Some(image_hash),
+            uploaded_by_ip: extract_client_ip(&headers),
+            ..Default::default()
+        };
 
     state.lettering_repo.create(&lettering).await?;
 
+    // Attach user ownership if authenticated
     if let Some(claims) = decode_optional_user_claims(&headers, &state.config.jwt_secret) {
         if let Ok(user_id) = Uuid::parse_str(&claims.sub) {
-            let _ = sqlx::query("UPDATE letterings SET user_id = $1 WHERE id = $2")
+            sqlx::query("UPDATE letterings SET user_id = $1 WHERE id = $2")
                 .bind(user_id)
                 .bind(id)
                 .execute(&state.db)
-                .await;
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to attach user ownership for lettering {}: {}", id, e);
+                    AppError::InternalError("Failed to link user ownership".into())
+                })?;
         }
     }
 
@@ -240,13 +271,15 @@ pub async fn upload_lettering(
             })
             .await
         {
-            tracing::warn!("ml queue enqueue failed for {}: {}", id, err);
-            approve_without_ml(&state, id, "Street Discovery").await?;
-            return Ok(Json(serde_json::json!({ "id": id, "status": "approved" })));
+            tracing::warn!("ML queue enqueue failed for {}: {}", id, err);
+            // Fallback: approve without ML processing with empty detected text
+            approve_without_ml(&state, id, "").await?;
+            return Ok(Json(serde_json::json!({ "id": id, "status": "approved", "message": "Uploaded successfully but ML processing unavailable" })));
         }
     } else {
-        approve_without_ml(&state, id, "Street Discovery").await?;
-        return Ok(Json(serde_json::json!({ "id": id, "status": "approved" })));
+        // ML processing is disabled - approve immediately with empty detected text
+        approve_without_ml(&state, id, "").await?;
+        return Ok(Json(serde_json::json!({ "id": id, "status": "approved", "message": "Uploaded successfully (ML processing disabled)" })));
     }
 
     Ok(Json(

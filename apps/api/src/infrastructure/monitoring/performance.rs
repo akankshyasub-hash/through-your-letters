@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn, error, instrument};
+use tracing::{debug, info, warn, instrument};
 use uuid::Uuid;
 
 /// Comprehensive performance monitoring service for production observability.
@@ -174,6 +174,40 @@ struct ResourceMetrics {
     disk_writes_per_sec: f64,
 }
 
+impl ResourceMetrics {
+    /// Records storage upload metrics
+    fn record_storage_upload(&mut self, success: bool, duration_ms: f64) {
+        // Update success rate using exponential moving average
+        let weight = 0.1; // 10% weight for new samples
+        let success_value = if success { 1.0 } else { 0.0 };
+        self.storage_upload_success_rate =
+            self.storage_upload_success_rate * (1.0 - weight) + success_value * weight;
+
+        // Update average upload time using exponential moving average
+        if success {
+            self.storage_avg_upload_time_ms =
+                self.storage_avg_upload_time_ms * (1.0 - weight) + duration_ms * weight;
+        }
+    }
+
+    /// Records network I/O activity
+    fn record_network_io(&mut self, bytes_sent: u64, bytes_received: u64) {
+        self.network_bytes_sent += bytes_sent;
+        self.network_bytes_received += bytes_received;
+    }
+
+    /// Updates disk I/O rates
+    fn update_disk_io(&mut self, reads_per_sec: f64, writes_per_sec: f64) {
+        self.disk_reads_per_sec = reads_per_sec;
+        self.disk_writes_per_sec = writes_per_sec;
+    }
+
+    /// Gets network throughput in MB/s
+    fn network_throughput_mbps(&self) -> f64 {
+        (self.network_bytes_sent + self.network_bytes_received) as f64 / 1_048_576.0
+    }
+}
+
 /// Error metrics by category and severity
 #[derive(Default, Clone)]
 struct ErrorMetrics {
@@ -194,6 +228,42 @@ struct ErrorMetrics {
 
     /// Error recovery time (average time to resolve)
     average_recovery_time: Duration,
+}
+
+impl ErrorMetrics {
+    /// Records an error occurrence
+    fn record_error(&mut self, status_code: u16, is_critical: bool) {
+        self.total_errors += 1;
+        *self.errors_by_status.entry(status_code).or_insert(0) += 1;
+
+        if is_critical {
+            self.critical_errors += 1;
+        }
+
+        self.last_error_time = Some(Instant::now());
+    }
+
+    /// Updates error rate based on time window
+    fn update_error_rate(&mut self, time_window_secs: u64) {
+        if time_window_secs > 0 {
+            let minutes = time_window_secs as f64 / 60.0;
+            self.error_rate = self.total_errors as f64 / minutes;
+        }
+    }
+
+    /// Gets error breakdown by status code
+    fn error_breakdown(&self) -> Vec<(u16, u64)> {
+        let mut breakdown: Vec<_> = self.errors_by_status.iter()
+            .map(|(k, v)| (*k, *v))
+            .collect();
+        breakdown.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        breakdown
+    }
+
+    /// Gets time since last error in seconds
+    fn time_since_last_error(&self) -> Option<u64> {
+        self.last_error_time.map(|t| t.elapsed().as_secs())
+    }
 }
 
 /// Flexible custom metric for domain-specific measurements
@@ -217,6 +287,90 @@ struct CustomMetric {
     critical_threshold: Option<f64>,
 }
 
+impl CustomMetric {
+    /// Creates a new custom metric
+    fn new(
+        name: String,
+        description: String,
+        metric_type: MetricType,
+        labels: HashMap<String, String>,
+        warning_threshold: Option<f64>,
+        critical_threshold: Option<f64>,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            metric_type,
+            data_points: Vec::new(),
+            labels,
+            warning_threshold,
+            critical_threshold,
+        }
+    }
+
+    /// Records a data point
+    fn record(&mut self, value: f64) {
+        self.data_points.push((Instant::now(), value));
+
+        // Keep last hour of data
+        let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+        self.data_points.retain(|(t, _)| *t > one_hour_ago);
+    }
+
+    /// Gets current value based on metric type
+    fn current_value(&self) -> f64 {
+        match self.metric_type {
+            MetricType::Counter => self.data_points.iter().map(|(_, v)| v).sum(),
+            MetricType::Gauge => self.data_points.last().map(|(_, v)| *v).unwrap_or(0.0),
+            MetricType::Histogram => {
+                if self.data_points.is_empty() {
+                    0.0
+                } else {
+                    let sum: f64 = self.data_points.iter().map(|(_, v)| v).sum();
+                    sum / self.data_points.len() as f64
+                }
+            }
+            MetricType::Rate => {
+                // For rates, calculate events per second over the last minute
+                let one_minute_ago = Instant::now() - Duration::from_secs(60);
+                let recent_points: Vec<_> = self.data_points.iter()
+                    .filter(|(t, _)| *t > one_minute_ago)
+                    .collect();
+
+                if recent_points.len() < 2 {
+                    0.0
+                } else {
+                    let sum: f64 = recent_points.iter().map(|(_, v)| *v).sum();
+                    sum / 60.0 // events per second
+                }
+            }
+        }
+    }
+
+    /// Gets metric metadata
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
+    fn labels(&self) -> &HashMap<String, String> {
+        &self.labels
+    }
+
+    /// Gets warning threshold if set
+    fn warning_threshold(&self) -> Option<f64> {
+        self.warning_threshold
+    }
+
+    /// Gets critical threshold if set
+    fn critical_threshold(&self) -> Option<f64> {
+        self.critical_threshold
+    }
+}
+
 /// Configuration for monitoring behavior and thresholds
 #[derive(Debug, Clone)]
 pub struct MonitorConfig {
@@ -229,7 +383,7 @@ pub struct MonitorConfig {
     /// High response time threshold in milliseconds
     high_response_time_threshold_ms: u64,
 
-    /// Error rate threshold for alerting
+    /// Error rate threshold for alerting (errors per minute)
     error_rate_threshold: f64,
 
     /// Memory usage threshold percentage
@@ -243,6 +397,18 @@ pub struct MonitorConfig {
 
     /// Cleanup interval in minutes
     cleanup_interval_minutes: u64,
+}
+
+impl MonitorConfig {
+    /// Checks if error rate exceeds configured threshold
+    pub fn is_error_rate_critical(&self, current_error_rate: f64) -> bool {
+        current_error_rate > self.error_rate_threshold
+    }
+
+    /// Gets error rate threshold
+    pub fn error_rate_threshold(&self) -> f64 {
+        self.error_rate_threshold
+    }
 }
 
 /// Supported metric types for proper aggregation strategies
@@ -259,6 +425,17 @@ pub enum MetricType {
 
     /// Rate of events over time windows
     Rate,
+}
+
+/// Summary of a custom metric for export
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CustomMetricSummary {
+    pub name: String,
+    pub description: String,
+    pub current_value: f64,
+    pub labels: HashMap<String, String>,
+    pub warning_threshold: Option<f64>,
+    pub critical_threshold: Option<f64>,
 }
 
 /// Comprehensive metric snapshot for monitoring dashboards and alerting
@@ -404,6 +581,7 @@ pub enum AlertSeverity {
 }
 
 /// Business events that can be tracked for analytics
+#[derive(Debug)]
 pub enum BusinessEvent {
     UserActivity { user_id: Option<Uuid> },
     LetteringUploaded { country_code: String },
@@ -418,6 +596,7 @@ pub enum BusinessEvent {
 }
 
 /// Types of user engagement for analytics tracking
+#[derive(Debug)]
 pub enum EngagementType {
     Like,
     Comment,
@@ -458,6 +637,11 @@ impl PerformanceMonitor {
     ) {
         let mut inner = self.inner.write().await;
         let key = format!("{}:{}", method, endpoint);
+
+        // Track if we need to record an error (to avoid borrow conflicts)
+        let should_record_error = matches!(status_code, 400..=599);
+        let is_critical_error = matches!(status_code, 500..=599);
+
         let metrics = inner.http_metrics.entry(key.clone()).or_default();
 
         metrics.total_requests += 1;
@@ -491,6 +675,12 @@ impl PerformanceMonitor {
         // Limit stored response times to prevent memory growth
         if metrics.response_times.len() > self.config.max_data_points {
             metrics.response_times.drain(0..100);
+        }
+
+        // Record error metrics after releasing the http_metrics borrow
+        if should_record_error {
+            let error_metrics = inner.error_metrics.entry(key.clone()).or_default();
+            error_metrics.record_error(status_code, is_critical_error);
         }
 
         // Check for performance alerts
@@ -685,7 +875,7 @@ impl PerformanceMonitor {
         current_value: f64,
     ) {
         let alert = Alert {
-            id: Uuid::new_v4().to_string(),
+            id: Uuid::now_v7().to_string(),
             severity,
             title: title.to_string(),
             description: description.to_string(),
@@ -846,8 +1036,8 @@ impl PerformanceMonitor {
             database_connection_usage: db_connection_usage,
             redis_memory_usage_mb: resources.redis_memory_usage_mb,
             storage_performance_score: resources.storage_upload_success_rate,
-            network_utilization: 0.0, // TODO: Calculate from network bytes
-            disk_utilization: 0.0,    // TODO: Calculate from disk I/O metrics
+            network_utilization: resources.network_throughput_mbps(),
+            disk_utilization: (resources.disk_reads_per_sec + resources.disk_writes_per_sec) / 100.0, // Normalized to 0-1 scale
         }
     }
 
@@ -857,6 +1047,7 @@ impl PerformanceMonitor {
         let mut critical_errors = 0;
         let mut error_rates = Vec::new();
         let mut recovery_times = Vec::new();
+        let mut all_errors_by_status: HashMap<u16, u64> = HashMap::new();
 
         for metrics in errors.values() {
             total_errors += metrics.total_errors;
@@ -864,6 +1055,11 @@ impl PerformanceMonitor {
             error_rates.push(metrics.error_rate);
             if metrics.average_recovery_time != Duration::ZERO {
                 recovery_times.push(metrics.average_recovery_time.as_secs_f64() / 60.0);
+            }
+
+            // Use the error_breakdown method to get status code distribution
+            for (status_code, count) in metrics.error_breakdown() {
+                *all_errors_by_status.entry(status_code).or_insert(0) += count;
             }
         }
 
@@ -879,13 +1075,21 @@ impl PerformanceMonitor {
             0.0
         };
 
+        // Get top 5 error types by count
+        let mut error_types: Vec<_> = all_errors_by_status.iter().collect();
+        error_types.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        let top_error_types: Vec<(String, u64)> = error_types.iter()
+            .take(5)
+            .map(|(status, count)| (format!("HTTP {}", status), **count))
+            .collect();
+
         ErrorSummary {
             total_errors_24h: total_errors,
             error_rate: avg_error_rate,
             critical_errors,
-            top_error_types: vec![], // TODO: Implement error type ranking
+            top_error_types,
             average_recovery_time_minutes: avg_recovery_time,
-            errors_by_hour: vec![], // TODO: Implement hourly error bucketing
+            errors_by_hour: vec![], // Would require time-bucketed data not currently tracked
         }
     }
 
@@ -1048,6 +1252,48 @@ impl PerformanceMonitor {
         sorted_data[index.min(sorted_data.len() - 1)] as f64
     }
 
+    /// Records a storage operation (upload/download) for monitoring
+    pub async fn record_storage_operation(&self, success: bool, duration_ms: f64, bytes_transferred: u64) {
+        let mut inner = self.inner.write().await;
+
+        // Update storage metrics
+        inner.resource_metrics.record_storage_upload(success, duration_ms);
+
+        // Update network I/O metrics
+        if success {
+            inner.resource_metrics.record_network_io(bytes_transferred, 0);
+        }
+    }
+
+    /// Updates disk I/O metrics from system monitoring
+    pub async fn update_disk_io_metrics(&self, reads_per_sec: f64, writes_per_sec: f64) {
+        let mut inner = self.inner.write().await;
+        inner.resource_metrics.update_disk_io(reads_per_sec, writes_per_sec);
+    }
+
+    /// Gets error metrics breakdown for monitoring dashboards across all endpoints
+    pub async fn get_error_breakdown(&self) -> HashMap<String, Vec<(u16, u64)>> {
+        let inner = self.inner.read().await;
+        inner.error_metrics.iter()
+            .map(|(k, v)| (k.clone(), v.error_breakdown()))
+            .collect()
+    }
+
+    /// Updates error rate based on observation window for all endpoints
+    pub async fn update_error_rates(&self, time_window_secs: u64) {
+        let mut inner = self.inner.write().await;
+        for error_metrics in inner.error_metrics.values_mut() {
+            error_metrics.update_error_rate(time_window_secs);
+        }
+    }
+
+    /// Gets time since last error for a specific endpoint
+    pub async fn get_time_since_last_error(&self, endpoint: &str) -> Option<u64> {
+        let inner = self.inner.read().await;
+        inner.error_metrics.get(endpoint)
+            .and_then(|metrics| metrics.time_since_last_error())
+    }
+
     /// Performs cleanup of old metric data to prevent memory growth
     pub async fn cleanup_old_metrics(&self) {
         if !self.config.enable_automatic_cleanup {
@@ -1093,15 +1339,14 @@ impl PerformanceMonitor {
         critical_threshold: Option<f64>,
     ) {
         let mut inner = self.inner.write().await;
-        let metric = CustomMetric {
-            name: name.clone(),
+        let metric = CustomMetric::new(
+            name.clone(),
             description,
             metric_type,
-            data_points: Vec::new(),
             labels,
             warning_threshold,
             critical_threshold,
-        };
+        );
         inner.custom_metrics.insert(name, metric);
     }
 
@@ -1109,10 +1354,11 @@ impl PerformanceMonitor {
     pub async fn record_custom_metric(&self, name: &str, value: f64) {
         let mut inner = self.inner.write().await;
         if let Some(metric) = inner.custom_metrics.get_mut(name) {
-            metric.data_points.push((Instant::now(), value));
+            // Use the record method instead of directly manipulating data_points
+            metric.record(value);
 
-            // Check alert thresholds
-            if let Some(critical) = metric.critical_threshold {
+            // Check alert thresholds using the getter methods
+            if let Some(critical) = metric.critical_threshold() {
                 if value > critical {
                     self.create_alert(
                         AlertSeverity::Critical,
@@ -1123,7 +1369,7 @@ impl PerformanceMonitor {
                         value,
                     ).await;
                 }
-            } else if let Some(warning) = metric.warning_threshold {
+            } else if let Some(warning) = metric.warning_threshold() {
                 if value > warning {
                     self.create_alert(
                         AlertSeverity::Warning,
@@ -1135,12 +1381,22 @@ impl PerformanceMonitor {
                     ).await;
                 }
             }
-
-            // Limit data points
-            if metric.data_points.len() > self.config.max_data_points {
-                metric.data_points.drain(0..100);
-            }
         }
+    }
+
+    /// Gets all custom metrics with their current values and metadata
+    pub async fn get_custom_metrics_summary(&self) -> Vec<CustomMetricSummary> {
+        let inner = self.inner.read().await;
+        inner.custom_metrics.values().map(|metric| {
+            CustomMetricSummary {
+                name: metric.name().to_string(),
+                description: metric.description().to_string(),
+                current_value: metric.current_value(),
+                labels: metric.labels().clone(),
+                warning_threshold: metric.warning_threshold(),
+                critical_threshold: metric.critical_threshold(),
+            }
+        }).collect()
     }
 }
 
@@ -1149,9 +1405,9 @@ impl Default for MonitorConfig {
         Self {
             max_data_points: 10000,
             slow_query_threshold_ms: 1000,
-            high_response_time_threshold_ms: 2000,
-            error_rate_threshold: 0.05,
-            memory_usage_threshold_percent: 80.0,
+            high_response_time_threshold_ms: 5000,
+            error_rate_threshold: 10.0, // 10 errors per minute
+            memory_usage_threshold_percent: 85.0,
             cpu_usage_threshold_percent: 80.0,
             enable_automatic_cleanup: true,
             cleanup_interval_minutes: 60,

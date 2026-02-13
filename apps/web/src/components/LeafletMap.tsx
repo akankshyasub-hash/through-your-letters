@@ -14,7 +14,6 @@ import { api } from "../lib/api";
 import { useCityStore } from "../store/useCityStore";
 
 // Fix Leaflet default icon path issue with bundlers
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:

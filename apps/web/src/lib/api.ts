@@ -254,6 +254,23 @@ export const api = {
       `${API_BASE_URL}/api/v1/letterings/${id}/revisits`,
     );
   },
+  async linkRevisit(
+      originalId: string, 
+      payload: { revisit_lettering_id: string; notes?: string }
+    ): Promise<void> {
+      await fetchJson<void>(
+        `${API_BASE_URL}/api/v1/letterings/${originalId}/revisits`,
+        {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(USER_SESSION_KEY),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+        USER_SESSION_KEY
+      );
+    },
 
   // Similar
   async getSimilar(id: string | number) {
@@ -302,6 +319,17 @@ export const api = {
       USER_SESSION_KEY,
     );
   },
+  // Add item to collection
+  async addToCollection(collectionId: string, letteringId: string): Promise<void> {
+      await fetchJson<void>(
+        `${API_BASE_URL}/api/v1/collections/${collectionId}/items/${letteringId}`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(USER_SESSION_KEY),
+        },
+        USER_SESSION_KEY
+      );
+    },
 
   // Cities
   async getCities(params?: {
@@ -396,9 +424,9 @@ export const api = {
     );
   },
 
-  async getCollections(): Promise<CollectionSummary[]> {
-    return fetchJson<CollectionSummary[]>(`${API_BASE_URL}/api/v1/collections`);
-  },
+  async getCollection(id: string): Promise<any> {
+     return fetchJson<any>(`${API_BASE_URL}/api/v1/collections/${id}`);
+   },
 
   async getChallenges(): Promise<ChallengeData[]> {
     return fetchJson<ChallengeData[]>(`${API_BASE_URL}/api/v1/challenges`);

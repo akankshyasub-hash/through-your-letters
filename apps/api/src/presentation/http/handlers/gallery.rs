@@ -152,14 +152,16 @@ pub async fn get_letterings(
 
     // Check cache first for performance optimization
     let cache_key = generate_cache_key(&params);
-    if let Ok(redis) = state.redis.get_multiplexed_async_connection().await {
-        if let Ok(Some(cached_response)) = redis::Cmd::get(&cache_key)
-            .query_async::<_, Option<String>>(&mut redis.clone())
+    if let Ok(mut redis) = state.redis.get_multiplexed_async_connection().await {
+        if let Ok(cached_response) = redis::Cmd::get(&cache_key)
+            .query_async::<Option<String>>(&mut redis)
             .await
         {
-            if let Ok(response) = serde_json::from_str::<PaginatedResponse>(&cached_response) {
-                debug!("Serving gallery response from cache");
-                return Ok(Json(response));
+            if let Some(cached_str) = cached_response {
+                if let Ok(response) = serde_json::from_str::<PaginatedResponse>(&cached_str) {
+                    debug!("Serving gallery response from cache");
+                    return Ok(Json(response));
+                }
             }
         }
     }
@@ -244,7 +246,7 @@ pub async fn get_letterings(
     // Cache the response for future requests
     if let Ok(mut redis) = state.redis.get_multiplexed_async_connection().await {
         if let Ok(response_json) = serde_json::to_string(&response) {
-            let _: Result<(), _> = redis::Cmd::set_ex(&cache_key, &response_json, GALLERY_CACHE_TTL)
+            let _: Result<(), _> = redis::Cmd::set_ex(&cache_key, &response_json, GALLERY_CACHE_TTL as u64)
                 .query_async(&mut redis)
                 .await;
         }

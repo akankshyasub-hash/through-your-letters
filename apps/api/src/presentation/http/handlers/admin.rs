@@ -22,7 +22,7 @@ async fn log_admin_action(
     lettering_id: Option<Uuid>,
     metadata: serde_json::Value,
 ) {
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO admin_audit_logs (id, admin_sub, action, lettering_id, metadata) VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(Uuid::now_v7())
@@ -31,7 +31,16 @@ async fn log_admin_action(
     .bind(lettering_id)
     .bind(metadata)
     .execute(&state.db)
-    .await;
+    .await
+    {
+        tracing::error!(
+            "Failed to log admin action '{}' by '{}' for lettering {:?}: {}",
+            action,
+            admin_sub,
+            lettering_id,
+            e
+        );
+    }
 }
 
 async fn notify_lettering_owner(
@@ -49,11 +58,18 @@ async fn notify_lettering_owner(
             .await
         {
             Ok(v) => v,
-            Err(_) => None,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch owner user_id for lettering {}: {}",
+                    lettering_id,
+                    e
+                );
+                None
+            }
         };
 
     if let Some(user_id) = owner_user_id {
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             "INSERT INTO notifications (id, user_id, type, title, body, metadata) VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(Uuid::now_v7())
@@ -63,7 +79,15 @@ async fn notify_lettering_owner(
         .bind(body)
         .bind(metadata)
         .execute(&state.db)
-        .await;
+        .await
+        {
+            tracing::error!(
+                "Failed to create notification for user {} (lettering {}): {}",
+                user_id,
+                lettering_id,
+                e
+            );
+        }
     }
 }
 

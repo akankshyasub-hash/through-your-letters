@@ -116,7 +116,7 @@ impl UploadLetteringUseCase {
         }
 
         // Generate unique identifier and storage paths
-        let lettering_id = Uuid::new_v4();
+        let lettering_id = Uuid::now_v7();
         let image_key = format!("letterings/{}/original.webp", lettering_id);
 
         debug!("Processing upload for lettering ID: {}", lettering_id);
@@ -254,7 +254,7 @@ impl UploadLetteringUseCase {
         let mut urls = vec![];
 
         for (name, width) in &sizes {
-            debug!("Generating {} thumbnail ({}px) for lettering {}", name, width, lettering_id);
+            debug!("Generating {} thumbnail ({}px) for lettering {}", name, width, id);
 
             let resized = img.resize(*width, u32::MAX, image::imageops::FilterType::Triangle);
             let mut buffer = std::io::Cursor::new(Vec::new());
@@ -263,7 +263,7 @@ impl UploadLetteringUseCase {
                 .map_err(|e| format!("Thumbnail generation failed: {}", e))?;
 
             // Upload thumbnail to storage
-            let key = format!("letterings/{}/{}.webp", lettering_id, name);
+            let key = format!("letterings/{}/{}.webp", id, name);
             let url = self
                 .storage
                 .upload(&key, buffer.into_inner(), "image/webp")

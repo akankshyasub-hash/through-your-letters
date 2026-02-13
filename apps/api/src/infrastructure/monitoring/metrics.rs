@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, instrument};
+use tracing::instrument;
 use uuid::Uuid;
 
 /// Comprehensive metrics service for production observability and performance monitoring.
@@ -84,6 +84,80 @@ struct CustomMetric {
 
     /// Labels for metric dimensionality
     labels: HashMap<String, String>,
+}
+
+impl CustomMetric {
+    /// Creates a new custom metric with the given configuration
+    fn new(name: String, description: String, metric_type: MetricType, labels: HashMap<String, String>) -> Self {
+        Self {
+            name,
+            description,
+            metric_type,
+            data_points: Vec::new(),
+            labels,
+        }
+    }
+
+    /// Records a data point for this metric
+    fn record(&mut self, value: f64) {
+        self.data_points.push((Instant::now(), value));
+
+        // Keep only last hour of data points to prevent unbounded growth
+        let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+        self.data_points.retain(|(timestamp, _)| *timestamp > one_hour_ago);
+    }
+
+    /// Gets the current value based on metric type
+    fn current_value(&self) -> f64 {
+        match self.metric_type {
+            MetricType::Counter => {
+                // For counters, sum all values
+                self.data_points.iter().map(|(_, v)| v).sum()
+            }
+            MetricType::Gauge => {
+                // For gauges, return the latest value
+                self.data_points.last().map(|(_, v)| *v).unwrap_or(0.0)
+            }
+            MetricType::Histogram => {
+                // For histograms, return the average
+                if self.data_points.is_empty() {
+                    0.0
+                } else {
+                    let sum: f64 = self.data_points.iter().map(|(_, v)| v).sum();
+                    sum / self.data_points.len() as f64
+                }
+            }
+            MetricType::Rate => {
+                // For rates, calculate events per second over the last minute
+                let one_minute_ago = Instant::now() - Duration::from_secs(60);
+                let recent_points: Vec<_> = self.data_points.iter()
+                    .filter(|(t, _)| *t > one_minute_ago)
+                    .collect();
+
+                if recent_points.len() < 2 {
+                    0.0
+                } else {
+                    let sum: f64 = recent_points.iter().map(|(_, v)| *v).sum();
+                    sum / 60.0 // events per second
+                }
+            }
+        }
+    }
+
+    /// Gets the metric name
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Gets the metric description
+    fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Gets the metric labels
+    fn labels(&self) -> &HashMap<String, String> {
+        &self.labels
+    }
 }
 
 /// Supported metric types for proper aggregation strategies
@@ -167,6 +241,7 @@ pub enum HealthStatus {
 }
 
 /// Business events that can be tracked for product analytics
+#[derive(Debug)]
 pub enum BusinessEvent {
     UserActivity { user_id: Uuid },
     LetteringUploaded { country_code: String },
@@ -177,10 +252,22 @@ pub enum BusinessEvent {
 }
 
 /// Types of user engagement for analytics tracking
+#[derive(Debug)]
 pub enum EngagementType {
     Like,
     Comment,
     Report,
+}
+
+/// Export format for custom metrics
+#[derive(Debug, Clone, Serialize)]
+pub struct CustomMetricExport {
+    pub name: String,
+    pub description: String,
+    pub metric_type: String,
+    pub current_value: f64,
+    pub labels: HashMap<String, String>,
+    pub data_point_count: usize,
 }
 
 impl MetricsService {
@@ -265,13 +352,7 @@ impl MetricsService {
         labels: HashMap<String, String>,
     ) {
         let mut inner = self.inner.write().await;
-        let metric = CustomMetric {
-            name: name.clone(),
-            description,
-            metric_type,
-            data_points: Vec::new(),
-            labels,
-        };
+        let metric = CustomMetric::new(name.clone(), description, metric_type, labels);
         inner.custom_metrics.insert(name, metric);
     }
 
@@ -279,13 +360,24 @@ impl MetricsService {
     pub async fn record_custom_metric(&self, name: &str, value: f64) {
         let mut inner = self.inner.write().await;
         if let Some(metric) = inner.custom_metrics.get_mut(name) {
-            metric.data_points.push((Instant::now(), value));
-
-            // Limit data points to prevent memory growth
-            if metric.data_points.len() > 1000 {
-                metric.data_points.drain(0..100);
-            }
+            // Use the record method which handles data retention automatically
+            metric.record(value);
         }
+    }
+
+    /// Exports all custom metrics with their metadata
+    pub async fn export_custom_metrics(&self) -> Vec<CustomMetricExport> {
+        let inner = self.inner.read().await;
+        inner.custom_metrics.values().map(|metric| {
+            CustomMetricExport {
+                name: metric.name().to_string(),
+                description: metric.description().to_string(),
+                metric_type: format!("{:?}", metric.metric_type),
+                current_value: metric.current_value(),
+                labels: metric.labels().clone(),
+                data_point_count: metric.data_points.len(),
+            }
+        }).collect()
     }
 
     /// Generates a comprehensive metrics snapshot for monitoring systems

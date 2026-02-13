@@ -35,6 +35,7 @@ const ContributorProfile = lazy(
   () => import("./components/ContributorProfile"),
 );
 const CommunityPage = lazy(() => import("./components/CommunityPage"));
+const CollectionDetailPage = lazy(() => import("./pages/CollectionDetailPage"));
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -107,6 +108,7 @@ const App: React.FC = () => {
                 }
               />
               <Route path="/lettering/:id" element={<LetteringDetailPage />} />
+              <Route path="/collections/:id" element={<CollectionDetailPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>

@@ -100,7 +100,7 @@ impl MonitoringService {
         let mut all_healthy = true;
 
         for check in checks.iter() {
-            let start_time = std::time::Instant::now();
+            let _start_time = std::time::Instant::now();
 
             let result = match tokio::time::timeout(check.timeout(), check.check()).await {
                 Ok(result) => result,
@@ -209,7 +209,7 @@ impl HealthCheck for RedisHealthCheck {
 
         match self.client.get_multiplexed_async_connection().await {
             Ok(mut conn) => {
-                match redis::cmd("PING").query_async::<_, String>(&mut conn).await {
+                match redis::cmd("PING").query_async::<String>(&mut conn).await {
                     Ok(response) => {
                         let healthy = response == "PONG";
                         HealthCheckResult {

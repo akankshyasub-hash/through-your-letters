@@ -23,6 +23,13 @@ use tower_http::set_header::SetResponseHeaderLayer;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
+    
+    if std::env::var("RUST_LOG").is_err() {
+            // SAFETY: Safe because this runs at the start of main before any threads are spawned
+            unsafe {
+                std::env::set_var("RUST_LOG", "info,api=debug,tower_http=debug");
+            }
+        }
     tracing_subscriber::fmt::init();
 
     let config = Config::from_env()?;

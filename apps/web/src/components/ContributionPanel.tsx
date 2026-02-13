@@ -63,28 +63,42 @@ const ContributionPanel: React.FC<{
   };
 
   const detectLocation = () => {
-    if (!navigator.geolocation)
-      return addToast("Geolocation not supported", "error");
+    if (!navigator.geolocation) {
+      addToast("Geolocation not supported by this browser", "info");
+      return;
+    }
+    
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`,
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`
           );
           const data = await res.json();
           const pc = data.address.postcode?.replace(/\s/g, "").substring(0, 6);
-          if (pc) handlePinChange(pc);
+          
+          if (pc) {
+            handlePinChange(pc);
+            addToast(`Detected PIN: ${pc}`, "success");
+          } else {
+            addToast("Could not determine PIN for this spot", "info");
+          }
         } catch {
-          addToast("Auto-detect failed", "error");
+          addToast("Location service busy. Please enter PIN manually.", "info");
         } finally {
           setIsLocating(false);
         }
       },
-      () => {
-        addToast("Location access denied", "error");
+      (err) => {
         setIsLocating(false);
+        if (err.code === 1) {
+          addToast("Location access denied. Please enter the photo's PIN manually.", "info");
+        } else {
+          addToast("GPS Signal weak. Enter PIN manually.", "info");
+        }
       },
+      { timeout: 10000 }
     );
   };
 
@@ -367,6 +381,19 @@ const ContributionPanel: React.FC<{
                     <button
                       onClick={() => removeFile(idx)}
                       className="absolute top-1 right-1 bg-black/80 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                  {(entry.status === "pending" || entry.status === "error") && (
+                    <button
+                      type="button" // Important to prevent form submission
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent triggering any parent clicks
+                        removeFile(idx);
+                      }}
+                      className="absolute top-1 right-1 bg-white text-black border border-black p-1 hover:bg-[#cc543a] hover:text-white transition-colors z-10 shadow-sm"
+                      title="Remove image"
                     >
                       <X size={14} />
                     </button>
