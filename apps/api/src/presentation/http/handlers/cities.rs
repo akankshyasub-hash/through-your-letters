@@ -309,15 +309,17 @@ async fn upsert_city(
     cover_image_url: Option<String>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO cities (id, name, country_code, center_lat, center_lng, default_zoom, description, cover_image_url, is_active)\
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)\
-         ON CONFLICT (name, country_code) DO UPDATE\
-         SET center_lat = EXCLUDED.center_lat,\
-             center_lng = EXCLUDED.center_lng,\
-             default_zoom = EXCLUDED.default_zoom,\
-             description = COALESCE(cities.description, EXCLUDED.description),\
-             cover_image_url = COALESCE(cities.cover_image_url, EXCLUDED.cover_image_url),\
-             is_active = true",
+        r#"
+        INSERT INTO cities (id, name, country_code, center_lat, center_lng, default_zoom, description, cover_image_url, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+        ON CONFLICT (name, country_code) DO UPDATE
+        SET center_lat = EXCLUDED.center_lat,
+            center_lng = EXCLUDED.center_lng,
+            default_zoom = EXCLUDED.default_zoom,
+            description = COALESCE(cities.description, EXCLUDED.description),
+            cover_image_url = COALESCE(cities.cover_image_url, EXCLUDED.cover_image_url),
+            is_active = true
+        "#,
     )
     .bind(Uuid::now_v7())
     .bind(name)

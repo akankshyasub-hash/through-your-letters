@@ -24,7 +24,10 @@ const LinkRevisitModal: React.FC<{ originalId: string; onClose: () => void }> = 
     try {
       await api.linkRevisit(originalId, { revisit_lettering_id: targetId, notes: notes.trim() || undefined });
       onClose();
-    } catch (e) { alert("Linking failed"); }
+    } catch {
+      // Fixed: Removed unused 'e' variable
+      alert("Linking failed");
+    }
   };
 
   return (

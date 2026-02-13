@@ -163,3 +163,17 @@ async fn shutdown_signal() {
         _ = terminate => { tracing::info!("SIGTERM received, shutting down"); }
     }
 }
+
+#[cfg(test)]
+mod manual_tests {
+    #[test]
+    fn generate_admin_hash() {
+        let password = ""; 
+        let hash = bcrypt::hash(password, 12).expect("Failed to hash");
+        println!("\n\n==========================================");
+        println!("PASSWORD: {}", password);
+        println!("YOUR ADMIN_PASSWORD_HASH:");
+        println!("{}", hash);
+        println!("==========================================\n\n");
+    }
+}

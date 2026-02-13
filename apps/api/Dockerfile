@@ -34,9 +34,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy binary and migrations from builder
 COPY --from=builder /app/target/release/api /usr/local/bin/api
 COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/models ./models 
 
 # Render standard envs
 ENV RUST_LOG=info

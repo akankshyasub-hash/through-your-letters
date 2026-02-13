@@ -181,7 +181,7 @@ pub async fn read_json<T: DeserializeOwned>(res: axum::response::Response) -> T 
 }
 
 pub async fn read_text(res: axum::response::Response) -> String {
-    let bytes = to_bytes(res.into_body(), usize::MAX)
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
         .await
         .expect("failed to read body");
     String::from_utf8(bytes.to_vec()).expect("invalid utf8")
@@ -189,26 +189,19 @@ pub async fn read_text(res: axum::response::Response) -> String {
 
 pub async fn expect_status(
     res: axum::response::Response,
-    expected: StatusCode,
+    expected: http::StatusCode,
 ) -> axum::response::Response {
-    if res.status() == expected {
-        return res;
+    let actual = res.status();
+    
+    if actual == expected {
+        return res; 
     }
 
-    let actual = res.status();
     let body = read_text(res).await;
-
-    // Log the error for debugging but use assert! for test failure
-    eprintln!("Status mismatch - expected: {expected}, got: {actual}");
-    eprintln!("Response body: {body}");
-
-    assert_eq!(
-        actual,
-        expected,
-        "HTTP status mismatch. Expected {expected}, got {actual}. Response body: {body}"
+    panic!(
+        "HTTP status mismatch. Expected {}, got {}. Response body: {}",
+        expected, actual, body
     );
-
-    res
 }
 
 pub fn unique_email(prefix: &str) -> String {
