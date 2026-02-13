@@ -14,7 +14,6 @@ jobs:
       - uses: actions/checkout@v4
       
       # Render auto-deploys on git push
-      # No action needed - just push to main branch
       
       # Optional: Trigger manual deploy
       - name: Trigger Render Deploy

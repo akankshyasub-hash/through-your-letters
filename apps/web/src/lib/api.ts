@@ -123,6 +123,7 @@ async function fetchJson<T>(
   authStorageKey?: string,
 ): Promise<T> {
   const res = await fetch(url, init);
+  
   if (!res.ok) {
     if (res.status === 401 && authStorageKey) {
       sessionStorage.removeItem(authStorageKey);
@@ -141,7 +142,18 @@ async function fetchJson<T>(
   }
 
   if (res.status === 204) return undefined as T;
-  return res.json();
+
+  const text = await res.text();
+  if (!text) {
+    return undefined as T; 
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Malformed JSON:", text);
+    throw new Error("Received invalid data from server");
+  }
 }
 
 export interface GalleryParams {

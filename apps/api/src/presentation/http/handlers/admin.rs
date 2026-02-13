@@ -364,7 +364,7 @@ pub async fn approve_lettering(
     .await;
 
     tracing::info!(lettering_id = %id, "Lettering approved");
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn reject_lettering(
@@ -416,7 +416,7 @@ pub async fn reject_lettering(
     .await;
 
     tracing::info!(lettering_id = %id, reason = %reason, "Lettering rejected");
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_any_lettering(
@@ -527,7 +527,7 @@ pub async fn clear_reports(
     .await;
 
     tracing::info!(lettering_id = %id, "Reports cleared by admin");
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn get_stats(State(state): State<AppState>) -> Result<Json<StatsResponse>, AppError> {
