@@ -151,7 +151,7 @@ async function fetchJson<T>(
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.error("Malformed JSON:", text);
+    console.error("Malformed JSON:", text, e);
     throw new Error("Received invalid data from server");
   }
 }

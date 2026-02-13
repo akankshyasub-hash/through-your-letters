@@ -14,6 +14,8 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  FolderPlus, // Added missing import
+  Link as LinkIcon, // Added for revisit linking
 } from "lucide-react";
 import { api } from "../lib/api";
 import { Lettering, Comment, RevisitLink } from "../types";
@@ -22,6 +24,8 @@ import { useToastStore } from "../store/useToastStore";
 import { useAuthStore } from "../store/useAuthStore";
 import BeforeAfterSlider from "../components/BeforeAfterSlider";
 import ImageLightbox from "../components/ImageLightbox";
+import AddToCollectionModal from "../components/AddToCollectionModal";
+import LinkRevisitModal from "../components/LinkRevisitModal"; // Integrated modal
 
 const LetteringDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,12 +37,14 @@ const LetteringDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Like
+  // Interaction State
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likeLoading, setLikeLoading] = useState(false);
+  const [isCurating, setIsCurating] = useState(false);
+  const [isLinkingRevisit, setIsLinkingRevisit] = useState(false);
 
-  // Comments
+  // Comments state
   const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
@@ -46,7 +52,7 @@ const LetteringDetailPage: React.FC = () => {
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsLoaded, setCommentsLoaded] = useState(false);
 
-  // Revisits & Similar
+  // Related Data
   const [revisits, setRevisits] = useState<RevisitLink[]>([]);
   const [similar, setSimilar] = useState<
     Array<{
@@ -60,37 +66,34 @@ const LetteringDetailPage: React.FC = () => {
   // Lightbox
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
+  const fetchData = async (targetId: string) => {
     setLoading(true);
-    setError(null);
-    api
-      .getLettering(id)
-      .then((data) => {
-        setLettering(data);
-        setLikesCount(data.likes_count || 0);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [id]);
+    try {
+      const data = await api.getLettering(targetId);
+      setLettering(data);
+      setLikesCount(data.likes_count || 0);
 
-  useEffect(() => {
-    if (!hydrated) {
-      hydrate();
+      // Parallel fetch for secondary data
+      const [revisitData, similarData] = await Promise.all([
+        api.getRevisits(targetId),
+        api.getSimilar(targetId),
+      ]);
+      setRevisits(revisitData.revisits || []);
+      setSimilar(similarData.similar || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Archive link broken");
+    } finally {
+      setLoading(false);
     }
-  }, [hydrated, hydrate]);
+  };
 
   useEffect(() => {
-    if (!id) return;
-    api
-      .getRevisits(id)
-      .then((d) => setRevisits(d.revisits || []))
-      .catch(() => {});
-    api
-      .getSimilar(id)
-      .then((d) => setSimilar(d.similar || []))
-      .catch(() => {});
+    if (id) fetchData(id);
   }, [id]);
+
+  useEffect(() => {
+    if (!hydrated) hydrate();
+  }, [hydrated, hydrate]);
 
   const handleLike = async () => {
     if (!id || likeLoading) return;
@@ -121,8 +124,7 @@ const LetteringDetailPage: React.FC = () => {
         addToast("Link copied to clipboard", "success");
       }
     } catch (err) {
-      if ((err as Error).name !== "AbortError")
-        addToast("Share failed", "error");
+      if ((err as Error).name !== "AbortError") addToast("Share failed", "error");
     }
   };
 
@@ -146,45 +148,20 @@ const LetteringDetailPage: React.FC = () => {
       addToast("Upload deleted", "success");
       navigate("/");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete upload";
-      addToast(message, "error");
+      addToast(err instanceof Error ? err.message : "Delete failed", "error");
     }
-  };
-
-  const fetchComments = async () => {
-    if (!id) return;
-    setCommentsLoading(true);
-    try {
-      const data = await api.getComments(id);
-      setComments(data);
-      setCommentsLoaded(true);
-    } catch {
-      addToast("Failed to load comments", "error");
-    } finally {
-      setCommentsLoading(false);
-    }
-  };
-
-  const toggleComments = () => {
-    if (!showComments && !commentsLoaded) fetchComments();
-    setShowComments(!showComments);
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      addToast("Sign in to post comments", "warning");
-      return;
-    }
-    if (!id || !newComment.trim()) return;
+    if (!user || !id || !newComment.trim()) return;
     setCommentSubmitting(true);
     try {
       const comment = await api.addComment(id, newComment.trim());
       if (comment.status === "VISIBLE" || !comment.status) {
         setComments((prev) => [comment, ...prev]);
       } else {
-        addToast("Comment submitted and held for moderator review.", "info");
+        addToast("Comment held for moderator review.", "info");
       }
       setNewComment("");
     } catch {
@@ -194,303 +171,128 @@ const LetteringDetailPage: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-32">
-        <Loader2 size={48} className="animate-spin text-[#cc543a]" />
-      </div>
-    );
-  }
-
-  if (error || !lettering) {
-    return (
-      <div className="text-center py-32 space-y-6">
-        <h2 className="text-4xl font-black uppercase">Not Found</h2>
-        <p className="text-slate-500 font-medium">
-          {error || "This lettering doesn't exist."}
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 text-[10px] font-black uppercase hover:bg-[#cc543a] transition-colors"
-        >
-          <ArrowLeft size={14} /> Back to Gallery
-        </button>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center py-40"><Loader2 size={48} className="animate-spin text-[#cc543a]" /></div>;
+  if (error || !lettering) return <div className="text-center py-32 space-y-4"><h2 className="text-2xl font-black uppercase">Not Found</h2><Link to="/" className="text-[#cc543a] font-black uppercase underline">Return to Gallery</Link></div>;
 
   const title = lettering.detected_text || "Street Discovery";
-  const narrative =
-    lettering.description ||
-    lettering.cultural_context ||
-    "Archived street typography from the city.";
+  const narrative = lettering.description || lettering.cultural_context || "Archived street typography.";
 
   return (
     <>
-      <Helmet>
-        <title>{title} | Through Your Letters</title>
-        <meta property="og:title" content={`${title} | Through Your Letters`} />
-        <meta property="og:image" content={lettering.image_url} />
-        <meta property="og:description" content={narrative.substring(0, 200)} />
-        <meta property="og:type" content="article" />
-      </Helmet>
+      <Helmet><title>{title} | Through Your Letters</title></Helmet>
 
       {lightboxOpen && (
-        <ImageLightbox
-          imageUrl={lettering.image_url}
-          title={title}
-          letteringId={lettering.id}
-          onClose={() => setLightboxOpen(false)}
-        />
+        <ImageLightbox imageUrl={lettering.image_url} title={title} letteringId={lettering.id} onClose={() => setLightboxOpen(false)} />
       )}
 
-      <div className="max-w-5xl mx-auto space-y-12 pb-24">
-        {/* Back */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Back
+      {isCurating && (
+        <AddToCollectionModal letteringId={lettering.id} onClose={() => { setIsCurating(false); addToast("Specimen added to collection", "success"); }} />
+      )}
+
+      {isLinkingRevisit && (
+        <LinkRevisitModal originalId={lettering.id} onClose={() => { setIsLinkingRevisit(false); fetchData(lettering.id); }} />
+      )}
+
+      <div className="max-w-5xl mx-auto space-y-12 pb-24 animate-in">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors">
+          <ArrowLeft size={14} /> Back
         </button>
 
-        {/* Hero */}
         <div className="flex flex-col md:flex-row gap-12">
-          <div className="w-full md:w-3/5 relative group">
-            <div className="p-3 bg-white border-2 border-black brutalist-shadow transition-all duration-500 hover:rotate-1">
-              <img
-                src={lettering.image_url}
-                className="w-full aspect-square object-cover contrast-125 grayscale hover:grayscale-0 transition-all duration-700 cursor-zoom-in"
-                alt={title}
-                onClick={() => setLightboxOpen(true)}
-              />
+          <div className="w-full md:w-3/5">
+            <div className="p-3 bg-white border-2 border-black brutalist-shadow transition-all hover:rotate-1">
+              <img src={lettering.image_url} className="w-full aspect-square object-cover contrast-125 grayscale hover:grayscale-0 transition-all cursor-zoom-in" alt={title} onClick={() => setLightboxOpen(true)} />
               <div className="p-4 flex justify-between items-center border-t border-black/5 mt-2 bg-slate-50/50">
                 <div className="flex items-center gap-2">
                   <MapPin size={14} className="text-[#cc543a]" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    {lettering.pin_code}
-                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">{lettering.pin_code}</span>
                 </div>
-                <Link
-                  to={`/contributor/${lettering.contributor_tag}`}
-                  className="text-[9px] font-black uppercase text-[#cc543a] hover:underline"
-                >
-                  By {lettering.contributor_tag}
-                </Link>
+                <Link to={`/contributor/${lettering.contributor_tag}`} className="text-[9px] font-black uppercase text-[#cc543a] hover:underline">By {lettering.contributor_tag}</Link>
               </div>
             </div>
           </div>
 
           <div className="w-full md:w-2/5 flex flex-col space-y-8">
-            {/* Actions */}
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-4">
               <div className="flex gap-2 flex-wrap">
-                {lettering.ml_metadata?.style && (
-                  <span className="bg-black text-white px-4 py-1.5 text-xs font-black uppercase rotate-1 shadow-[4px_4px_0_0_#cc543a]">
-                    {lettering.ml_metadata.style}
-                  </span>
-                )}
-                {lettering.ml_metadata?.script && (
-                  <span className="text-[9px] px-2 py-1 border border-black font-black uppercase bg-slate-50">
-                    {lettering.ml_metadata.script}
-                  </span>
-                )}
+                <span className="bg-black text-white px-4 py-1.5 text-xs font-black uppercase rotate-1 shadow-[4px_4px_0_0_#cc543a]">
+                  {lettering.ml_metadata?.style || "Handcrafted"}
+                </span>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleLike}
-                  disabled={likeLoading}
-                  className={`p-2 border-2 border-black bg-white hover:bg-red-50 transition-colors flex items-center gap-1 ${liked ? "text-[#cc543a]" : "text-slate-400"}`}
-                >
+              <div className="flex gap-2 flex-wrap justify-end">
+                <button onClick={handleLike} className={`p-2 border-2 border-black bg-white hover:bg-red-50 transition-colors flex items-center gap-1 ${liked ? "text-[#cc543a]" : "text-slate-400"}`}>
                   <Heart size={16} fill={liked ? "currentColor" : "none"} />
                   <span className="text-[10px] font-black">{likesCount}</span>
                 </button>
-                <button
-                  onClick={toggleComments}
-                  className="p-2 border-2 border-black bg-white hover:bg-slate-100 flex items-center gap-1 text-slate-600"
-                >
-                  <MessageCircle size={16} />
-                  <span className="text-[10px] font-black">
-                    {lettering.comments_count || 0}
-                  </span>
+                <button onClick={() => setIsCurating(true)} className="p-2 border-2 border-black bg-white hover:bg-black hover:text-white transition-colors" title="Curate">
+                  <FolderPlus size={16} />
                 </button>
-                <button
-                  onClick={handleShare}
-                  className="p-2 border-2 border-black bg-white hover:bg-slate-100"
-                >
-                  <Share2 size={16} />
+                <button onClick={() => setIsLinkingRevisit(true)} className="p-2 border-2 border-black bg-white hover:bg-black hover:text-white transition-colors" title="Link Revisit">
+                  <LinkIcon size={16} />
                 </button>
-                <a
-                  href={`${API_BASE_URL}/api/v1/letterings/${lettering.id}/download`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 border-2 border-black bg-white hover:bg-slate-100"
-                >
-                  <Download size={16} />
-                </a>
-                <button
-                  onClick={handleReport}
-                  className="p-2 border-2 border-black bg-white hover:bg-yellow-50 text-yellow-700"
-                >
-                  <AlertTriangle size={16} />
-                </button>
+                <button onClick={handleShare} className="p-2 border-2 border-black bg-white hover:bg-slate-100"><Share2 size={16} /></button>
+                <a href={`${API_BASE_URL}/api/v1/letterings/${lettering.id}/download`} target="_blank" rel="noreferrer" className="p-2 border-2 border-black bg-white hover:bg-slate-100"><Download size={16} /></a>
                 {lettering.is_owner && (
-                  <button
-                    onClick={handleDelete}
-                    className="p-2 border-2 border-black bg-white hover:bg-red-600 hover:text-white text-red-600"
-                    title="Delete your upload"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <button onClick={handleDelete} className="p-2 border-2 border-black bg-white hover:bg-red-600 hover:text-white text-red-600"><Trash2 size={16} /></button>
                 )}
               </div>
             </div>
 
-            {/* Title */}
-            <h1 className="text-5xl font-black tracking-tighter leading-[0.9] drop-shadow-sm break-words">
-              {title}
-            </h1>
+            <h1 className="text-5xl font-black tracking-tighter leading-[0.9] break-words">{title}</h1>
 
-            {/* Context */}
-            <div className="space-y-3">
-              <p className="text-xl leading-snug font-medium text-slate-900 break-words whitespace-pre-wrap">
-                {narrative}
-              </p>
+            <div className="space-y-6">
+              <p className="text-xl leading-snug font-medium text-slate-900 break-words whitespace-pre-wrap">{narrative}</p>
+              <div className="bg-[#f8f5f0] p-6 border-4 border-black border-dashed relative">
+                <div className="absolute -top-3 left-4 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">Archival Record</div>
+                <p className="serif text-sm italic text-slate-700">Status: {lettering.status} // Archived {new Date(lettering.created_at).toLocaleDateString()}</p>
+              </div>
             </div>
 
-            <div className="bg-[#f8f5f0] p-8 border-4 border-black border-dashed relative overflow-hidden">
-              <div className="absolute -top-3 left-4 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
-                Archival Record
-              </div>
-              <p className="serif text-lg leading-relaxed text-slate-700 italic">
-                Status: {lettering.status}. Archived:{" "}
-                {new Date(lettering.created_at).toLocaleDateString()}
-              </p>
-            </div>
-
-            {/* Comments */}
-            {showComments && (
-              <div className="border-4 border-black bg-white space-y-4">
-                <button
-                  onClick={toggleComments}
-                  className="w-full flex items-center justify-between p-4 border-b-2 border-black/10 hover:bg-slate-50"
-                >
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    Comments
-                  </span>
-                  <ChevronUp size={16} />
-                </button>
-                <form
-                  onSubmit={handleAddComment}
-                  className="px-4 flex items-center gap-2"
-                >
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder={
-                      user ? "Add a comment..." : "Sign in to comment"
-                    }
-                    className="flex-1 border-2 border-black p-3 text-sm font-medium outline-none focus:border-[#cc543a]"
-                    disabled={commentSubmitting || !user}
-                    maxLength={500}
-                  />
-                  <button
-                    type="submit"
-                    disabled={commentSubmitting || !newComment.trim() || !user}
-                    className="p-3 bg-black text-white border-2 border-black hover:bg-[#cc543a] transition-colors disabled:opacity-50"
-                  >
-                    {commentSubmitting ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Send size={16} />
-                    )}
-                  </button>
-                </form>
-                {!user && (
-                  <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Sign in from the account page to comment.
-                  </p>
-                )}
-                <div className="px-4 pb-4 space-y-3 max-h-64 overflow-y-auto">
-                  {commentsLoading ? (
-                    <div className="flex justify-center py-4">
-                      <Loader2
-                        size={20}
-                        className="animate-spin text-[#cc543a]"
-                      />
-                    </div>
-                  ) : comments.length === 0 ? (
-                    <p className="text-[10px] font-bold uppercase text-slate-400 text-center py-4">
-                      No comments yet. Be the first.
-                    </p>
-                  ) : (
-                    comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="border-l-2 border-black/10 pl-3 space-y-1"
-                      >
-                        <p className="text-[9px] font-black uppercase tracking-widest text-[#cc543a]">
-                          {comment.commenter_name || "Anonymous"}
-                        </p>
-                        <p className="text-sm font-medium text-slate-900">
-                          {comment.content}
-                        </p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase">
-                          {new Date(comment.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {!showComments && (
-              <button
-                onClick={toggleComments}
-                className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-black transition-colors"
-              >
-                <ChevronDown size={14} />
-                Show Comments ({lettering.comments_count || 0})
+            {/* Comments Section */}
+            <div className="border-4 border-black bg-white">
+              <button onClick={() => { if(!showComments && !commentsLoaded) api.getComments(lettering.id).then(setComments); setShowComments(!showComments); }} className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                <span className="text-[10px] font-black uppercase tracking-widest">Notes & Comments ({lettering.comments_count || 0})</span>
+                {showComments ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
-            )}
+              
+              {showComments && (
+                <div className="p-4 border-t-2 border-black space-y-4">
+                  <form onSubmit={handleAddComment} className="flex gap-2">
+                    <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)} placeholder={user ? "Add a note..." : "Sign in to comment"} className="flex-1 border-2 border-black p-2 text-sm outline-none" disabled={!user || commentSubmitting} />
+                    <button type="submit" disabled={!user || !newComment.trim() || commentSubmitting} className="p-2 bg-black text-white border-2 border-black hover:bg-[#cc543a] transition-all">
+                      {commentSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    </button>
+                  </form>
+                  <div className="space-y-4 max-h-60 overflow-y-auto">
+                    {comments.map(c => (
+                      <div key={c.id} className="border-l-2 border-black/10 pl-3">
+                        <p className="text-[9px] font-black uppercase text-[#cc543a]">{c.commenter_name}</p>
+                        <p className="text-sm text-slate-800">{c.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Revisits */}
             {revisits.length > 0 && (
               <div className="space-y-3">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#cc543a]">
-                  Before / After
-                </h4>
-                {revisits.map((revisit) => (
-                  <BeforeAfterSlider key={revisit.id} revisit={revisit} />
-                ))}
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#cc543a]">Temporal History (Before/After)</h4>
+                {revisits.map((revisit) => <BeforeAfterSlider key={revisit.id} revisit={revisit} />)}
               </div>
             )}
           </div>
         </div>
 
-        {/* Similar */}
+        {/* Similar Gallery */}
         {similar.length > 0 && (
           <div className="space-y-6 border-t-4 border-black pt-12">
-            <h3 className="text-2xl font-black uppercase tracking-tighter">
-              Similar Lettering
-            </h3>
+            <h3 className="text-2xl font-black uppercase tracking-tighter">Related Findings</h3>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
               {similar.map((item) => (
-                <Link
-                  key={item.id}
-                  to={`/lettering/${item.id}`}
-                  className="border-2 border-black p-2 bg-white hover:-translate-y-1 transition-transform group"
-                >
-                  <img
-                    src={item.thumbnail || item.image_url}
-                    alt={item.detected_text || "Similar lettering"}
-                    className="w-full aspect-square object-cover border border-black/20 grayscale group-hover:grayscale-0 transition-all"
-                  />
-                  <p className="text-[9px] font-black uppercase truncate mt-2">
-                    {item.detected_text || "Discovery"}
-                  </p>
+                <Link key={item.id} to={`/lettering/${item.id}`} className="border-2 border-black p-2 bg-white hover:-translate-y-1 transition-all group">
+                  <img src={item.thumbnail || item.image_url} alt="Similar" className="w-full aspect-square object-cover border border-black/20 grayscale group-hover:grayscale-0 transition-all" />
                 </Link>
               ))}
             </div>
