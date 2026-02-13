@@ -254,23 +254,25 @@ export const api = {
       `${API_BASE_URL}/api/v1/letterings/${id}/revisits`,
     );
   },
+
+  // Link a revisit (Location Timeline)
   async linkRevisit(
-      originalId: string, 
-      payload: { revisit_lettering_id: string; notes?: string }
-    ): Promise<void> {
-      await fetchJson<void>(
-        `${API_BASE_URL}/api/v1/letterings/${originalId}/revisits`,
-        {
-          method: "POST",
-          headers: {
-            ...getAuthHeaders(USER_SESSION_KEY),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+    originalId: string, 
+    payload: { revisit_lettering_id: string; notes?: string }
+  ): Promise<void> {
+    await fetchJson<void>(
+      `${API_BASE_URL}/api/v1/letterings/${originalId}/revisits`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(USER_SESSION_KEY),
+          "Content-Type": "application/json",
         },
-        USER_SESSION_KEY
-      );
-    },
+        body: JSON.stringify(payload),
+      },
+      USER_SESSION_KEY
+    );
+  },
 
   // Similar
   async getSimilar(id: string | number) {
@@ -319,17 +321,6 @@ export const api = {
       USER_SESSION_KEY,
     );
   },
-  // Add item to collection
-  async addToCollection(collectionId: string, letteringId: string): Promise<void> {
-      await fetchJson<void>(
-        `${API_BASE_URL}/api/v1/collections/${collectionId}/items/${letteringId}`,
-        {
-          method: "POST",
-          headers: getAuthHeaders(USER_SESSION_KEY),
-        },
-        USER_SESSION_KEY
-      );
-    },
 
   // Cities
   async getCities(params?: {
@@ -424,9 +415,27 @@ export const api = {
     );
   },
 
+  // List all collections (public)
+  async getCollections(): Promise<CollectionSummary[]> {
+    return fetchJson<CollectionSummary[]>(`${API_BASE_URL}/api/v1/collections`);
+  },
+
+  // Get single collection detail
   async getCollection(id: string): Promise<any> {
-     return fetchJson<any>(`${API_BASE_URL}/api/v1/collections/${id}`);
-   },
+    return fetchJson<any>(`${API_BASE_URL}/api/v1/collections/${id}`);
+  },
+
+  // Add lettering to a collection
+  async addToCollection(collectionId: string, letteringId: string): Promise<void> {
+    await fetchJson<void>(
+      `${API_BASE_URL}/api/v1/collections/${collectionId}/items/${letteringId}`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(USER_SESSION_KEY),
+      },
+      USER_SESSION_KEY
+    );
+  },
 
   async getChallenges(): Promise<ChallengeData[]> {
     return fetchJson<ChallengeData[]>(`${API_BASE_URL}/api/v1/challenges`);
