@@ -49,7 +49,7 @@ const LetteringDetailPage: React.FC = () => {
   const [commentsLoading, setCommentsLoading] = useState(false);
 
   const [revisits, setRevisits] = useState<RevisitLink[]>([]);
-  const [similar, setSimilar] = useState<any[]>([]);
+  const [similar, setSimilar] = useState<any[]>([]); // This variable is now read in the JSX below
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const fetchData = useCallback(async (targetId: string) => {
@@ -256,6 +256,24 @@ const LetteringDetailPage: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Similar Gallery - Restore this section to read the 'similar' variable */}
+        {similar.length > 0 && (
+          <div className="space-y-6 border-t-4 border-black pt-12">
+            <h3 className="text-2xl font-black uppercase tracking-tighter">Related Findings</h3>
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+              {similar.map((item) => (
+                <Link key={item.id} to={`/lettering/${item.id}`} className="border-2 border-black p-2 bg-white hover:-translate-y-1 transition-all group">
+                  <img 
+                    src={item.thumbnail || item.image_url} 
+                    alt="Similar Specimen" 
+                    className="w-full aspect-square object-cover border border-black/20 grayscale group-hover:grayscale-0 transition-all" 
+                  />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
